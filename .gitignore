@@ -1,0 +1,53 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS/editor files
+.DS_Store
+.vscode/
+*.swp
+*.swo
+*~
+
+# Test and temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+test-output/
+test-results/
+.coverage*
+.pytest_cache/
+
+# Database files
+*.sqlite
+alembic.ini
+
+# Environment files
+.env
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs and local DB
+*.log
+*.sqlite3
+*.db
+*.db-journal

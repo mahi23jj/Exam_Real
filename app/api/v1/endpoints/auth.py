@@ -8,6 +8,11 @@ from app.schemas.auth import LoginRequest, RefreshTokenRequest, Token
 from app.schemas.user import UserCreate, UserRead
 from app.services.auth_service import AuthService
 
+from fastapi import APIRouter, Depends
+from fastapi.security import OAuth2PasswordRequestForm
+
+router = APIRouter()
+
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
@@ -70,3 +75,18 @@ async def get_me(
 ) -> UserRead:
     """Returns the authenticated user profile."""
     return current_user
+
+
+
+@router.post("/token", response_model=Token)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db)
+):
+    auth_service = AuthService(db)
+    login = LoginRequest(
+        email=form_data.username,   # OAuth2 uses "username"
+        password=form_data.password,
+    )
+
+    return await auth_service.authenticate_user(login)

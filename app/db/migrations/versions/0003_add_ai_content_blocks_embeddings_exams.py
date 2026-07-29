@@ -21,8 +21,8 @@ def upgrade() -> None:
     # 1. Content Blocks Table
     op.create_table(
         "content_blocks",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("document_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("document_id", sa.UUID(), nullable=False),
         sa.Column("page_number", sa.Integer(), nullable=False),
         sa.Column("block_order", sa.Integer(), nullable=False),
         sa.Column("content", sa.String(), nullable=False),
@@ -39,8 +39,8 @@ def upgrade() -> None:
     # 2. Embeddings Table with 1536-dimensional Vector
     op.create_table(
         "embeddings",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("content_block_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("content_block_id", sa.UUID(), nullable=False),
         sa.Column("vector", Vector(1536), nullable=False),
         sa.Column("model_name", sa.String(), nullable=False, server_default="text-embedding-3-small"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -57,8 +57,8 @@ def upgrade() -> None:
     # 3. Exams Table
     op.create_table(
         "exams",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("document_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("document_id", sa.UUID(), nullable=False),
         sa.Column("title", sa.String(length=255), nullable=False),
         sa.Column("academic_year", sa.String(length=50), nullable=True),
         sa.Column("term", sa.String(length=50), nullable=True),
@@ -73,8 +73,8 @@ def upgrade() -> None:
     # 4. Questions Table
     op.create_table(
         "questions",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("exam_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("exam_id", sa.UUID(), nullable=False),
         sa.Column("question_number", sa.Integer(), nullable=False),
         sa.Column("question_text", sa.String(), nullable=False),
         sa.Column("question_image_url", sa.String(), nullable=True),
@@ -92,8 +92,8 @@ def upgrade() -> None:
     # 5. Choices Table
     op.create_table(
         "choices",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("question_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("question_id", sa.UUID(), nullable=False),
         sa.Column("choice_label", sa.String(length=10), nullable=False),
         sa.Column("choice_text", sa.String(), nullable=False),
         sa.Column("is_correct", sa.Boolean(), nullable=True),
@@ -108,9 +108,9 @@ def upgrade() -> None:
     # 6. Question ContentBlock Link Table
     op.create_table(
         "question_content_block_links",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("question_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("content_block_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("question_id", sa.UUID(), nullable=False),
+        sa.Column("content_block_id", sa.UUID(), nullable=False),
         sa.Column("similarity_score", sa.Float(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

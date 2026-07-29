@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.base import utc_now
 
 from app.core.config import settings
 from app.core.exceptions import (
@@ -58,7 +59,10 @@ class AuthService:
         access_token = create_access_token(subject=user.id)
         refresh_token_str = create_refresh_token_string()
 
-        expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        # expires_at = utc_now() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expires_at = utc_now() + timedelta(
+    days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+)
         refresh_token_obj = RefreshToken(
             user_id=user.id,
             token=refresh_token_str,
@@ -81,7 +85,7 @@ class AuthService:
             raise RefreshTokenExpiredException()
 
         # Check expiration
-        now = datetime.now(timezone.utc)
+        now = utc_now()
         expires_at = token_obj.expires_at
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)

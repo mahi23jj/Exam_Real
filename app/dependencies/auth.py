@@ -11,7 +11,7 @@ from app.model.user import User
 from app.schemas.token import TokenPayload
 
 reusable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.api_v1_prefix}/auth/login/access-token"
+    tokenUrl="/api/v1/v1/auth/token"
 )
 
 

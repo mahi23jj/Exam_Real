@@ -6,6 +6,7 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 from app.schemas.auth import TokenPayload
+from app.db.base import utc_now
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -23,9 +24,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def create_access_token(subject: str | uuid.UUID, expires_delta: Optional[timedelta] = None) -> str:
     """Creates a JWT access token with expiration."""
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = utc_now() + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = utc_now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode = {
         "sub": str(subject),

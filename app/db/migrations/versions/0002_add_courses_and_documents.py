@@ -20,11 +20,11 @@ def upgrade() -> None:
     # 1. Courses Table
     op.create_table(
         "courses",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("code", sa.String(length=50), nullable=False),
         sa.Column("title", sa.String(length=255), nullable=False),
         sa.Column("description", sa.String(), nullable=True),
-        sa.Column("created_by_user_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("created_by_user_id", sa.UUID(), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -38,9 +38,9 @@ def upgrade() -> None:
     # 2. Documents Table
     op.create_table(
         "documents",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("course_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("uploaded_by_user_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("course_id", sa.UUID(), nullable=False),
+        sa.Column("uploaded_by_user_id", sa.UUID(), nullable=False),
         sa.Column("title", sa.String(length=255), nullable=False),
         sa.Column("file_name", sa.String(length=255), nullable=False),
         sa.Column("file_type", sa.Enum("PDF", "PPT", "PPTX", "IMAGE", name="filetype"), nullable=False),
@@ -64,8 +64,8 @@ def upgrade() -> None:
     # 3. Document Processing Jobs Table
     op.create_table(
         "document_processing_jobs",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("document_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("document_id", sa.UUID(), nullable=False),
         sa.Column("status", sa.Enum("PENDING", "PROCESSING", "COMPLETED", "FAILED", name="jobstatus_job"), nullable=False),
         sa.Column("current_step", sa.String(length=100), nullable=False),
         sa.Column("error_message", sa.String(), nullable=True),

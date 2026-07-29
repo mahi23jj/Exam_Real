@@ -19,10 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.create_table(
         "student_answers",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("student_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("question_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("selected_choice_id", sqlmodel.sql.sqltypes.GUID(), nullable=True),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("student_id", sa.UUID(), nullable=False),
+        sa.Column("question_id", sa.UUID(), nullable=False),
+        sa.Column("selected_choice_id", sa.UUID(), nullable=True),
         sa.Column("confidence", sa.Enum("CONFIDENT", "UNSURE", "GUESS", name="confidencelevel"), nullable=False),
         sa.Column("reasoning_text", sa.String(), nullable=True),
         sa.Column("is_correct", sa.Boolean(), nullable=True),

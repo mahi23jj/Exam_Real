@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     )
 
     # Core Settings
-    APP_NAME: str = "StudyLoop AI"
+    APP_NAME: str = "ExamReal AI"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"

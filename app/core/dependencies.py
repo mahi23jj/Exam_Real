@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.services.auth_service import AuthService
 
 reusable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.API_V1_PREFIX}/auth/login"
+    tokenUrl="/api/v1/v1/auth/token"
 )
 
 

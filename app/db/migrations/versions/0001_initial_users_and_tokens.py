@@ -22,7 +22,7 @@ def upgrade() -> None:
 
     op.create_table(
         "users",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("hashed_password", sa.String(), nullable=False),
         sa.Column("full_name", sa.String(length=255), nullable=False),
@@ -38,8 +38,8 @@ def upgrade() -> None:
 
     op.create_table(
         "refresh_tokens",
-        sa.Column("id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
-        sa.Column("user_id", sqlmodel.sql.sqltypes.GUID(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("token", sa.String(), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("revoked", sa.Boolean(), nullable=False, server_default="false"),

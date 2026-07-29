@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from app.db.models.user import User
     from app.db.models.course import Course
     from app.db.models.job import DocumentProcessingJob
+from sqlalchemy import Column, Enum
 
 
 class FileType(str, enum.Enum):
@@ -45,7 +46,16 @@ class Document(TimestampMixin, table=True):
     cloudinary_public_id: str = Field(nullable=False)
     cloudinary_secure_url: str = Field(nullable=False)
     file_size_bytes: int = Field(nullable=False)
-    status: JobStatus = Field(default=JobStatus.PENDING, nullable=False)
+    status: JobStatus = Field(
+        sa_column=Column(
+            Enum(
+                JobStatus,
+                name="jobstatus"
+            ),
+            nullable=False
+        ),
+        default=JobStatus.PENDING
+    )
     
     metadata_json: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
     is_active: bool = Field(default=True, nullable=False)

@@ -5,7 +5,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.ai.llm.factory import get_llm_provider
-from app.db.models.exam import AnswerSource
+from app.db.models.exam import AnswerSource, DifficultyLevel, QuestionType
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,14 @@ class ExtractedQuestion(BaseModel):
     question_text: str
     choices: List[ExtractedChoice] = Field(default_factory=list)
     explanation: Optional[str] = None
+    
+    # Educational Intelligence Fields
+    topic: str = Field(description="The primary broad academic topic this question belongs to (e.g. CPU Scheduling)")
+    subtopic: Optional[str] = Field(default=None, description="A more specific subtopic (e.g. Round Robin Algorithm)")
+    difficulty: DifficultyLevel = Field(description="Estimated difficulty level of the question: EASY, MEDIUM, or HARD")
+    question_type: QuestionType = Field(description="The format of the question: MULTIPLE_CHOICE, TRUE_FALSE, or OPEN_ENDED")
+    confidence: float = Field(description="Confidence score (0.0 to 1.0) on the extraction accuracy and topic classification", ge=0.0, le=1.0)
+    
     answer_source: AnswerSource = Field(
         default=AnswerSource.MISSING,
         description=(
@@ -72,7 +80,9 @@ class ExamExtractor:
         llm = get_llm_provider()
         system_prompt = (
             "You are an expert academic exam analyzer. "
-            "Extract exam questions strictly conforming to the schema. "
+            "Your task is to extract exam questions and transform them into structured educational intelligence strictly conforming to the schema. "
+            "For every question, determine the broad academic `topic`, a more specific `subtopic`, estimate the `difficulty` (EASY, MEDIUM, HARD), "
+            "identify the `question_type` (MULTIPLE_CHOICE, TRUE_FALSE, OPEN_ENDED), and provide a `confidence` score (0.0 to 1.0). "
             "For answer_source: set OFFICIAL if the correct answer key is present in the text, "
             "AI_INFERRED if you can determine it from context, MISSING otherwise."
         )
@@ -87,8 +97,9 @@ class ExamExtractor:
 
         for chunk_idx, chunk in enumerate(text_chunks):
             prompt = (
-                "Extract all exam questions, answer choices (A, B, C, D), correct answers, "
-                "explanations, and answer_source from the following exam text segment. "
+                "Extract all exam questions from the following exam text segment. "
+                "Include answer choices (A, B, C, D), correct answers, explanations, and answer_source. "
+                "Critically analyze each question to classify its educational topic, subtopic, difficulty, and question type. "
                 "If a question is partially cut off, extract as much as possible.\n\n"
                 f"--- EXAM TEXT SEGMENT {chunk_idx + 1}/{len(text_chunks)} ---\n"
                 f"{chunk}\n"

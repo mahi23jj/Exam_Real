@@ -4,6 +4,7 @@ from app.ai.llm.gemini_provider import GeminiProvider
 from app.ai.llm.claude_provider import ClaudeProvider
 from app.ai.llm.openrouter_provider import OpenRouterProvider
 from app.core.config import settings
+from app.ai.llm.groq_provider import GroqProvider
 
 
 def get_llm_provider(provider_name: str | None = None) -> BaseLLMProvider:
@@ -18,6 +19,8 @@ def get_llm_provider(provider_name: str | None = None) -> BaseLLMProvider:
         return ClaudeProvider()
     elif provider == "openrouter":
         return OpenRouterProvider()
+    elif provider == "groq":
+        return GroqProvider()
     else:
         # Fallback to OpenAI
         return OpenAIProvider()

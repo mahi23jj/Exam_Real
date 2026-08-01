@@ -41,8 +41,8 @@ class Embedding(TimestampMixin, table=True):
     id: uuid.UUID = Field(default_factory=generate_uuid, primary_key=True, index=True)
     content_block_id: uuid.UUID = Field(foreign_key="content_blocks.id", unique=True, index=True, nullable=False)
     
-    # 1536-dimensional vector for OpenAI text-embedding-3-small
-    vector: List[float] = Field(sa_column=Column(Vector(1536), nullable=False))
+    # 1024-dimensional vector for OpenAI text-embedding-3-small
+    vector: List[float] = Field(sa_column=Column(Vector(1024), nullable=False))
     model_name: str = Field(default="text-embedding-3-small", nullable=False)
 
     # Relationships

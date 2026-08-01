@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: str = ""
 
     # AI & LLM Providers
-    DEFAULT_LLM_PROVIDER: Literal["openai", "gemini", "claude"] = "openai"
+    DEFAULT_LLM_PROVIDER: Literal["openai", "gemini", "claude", "groq"] = "groq"  # Options: openai, gemini, claude, groq
 
     # OpenAI Configuration
     OPENAI_API_KEY: str = ""
@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     # Anthropic Claude Configuration
     CLAUDE_API_KEY: str = ""
     CLAUDE_BASE_URL: str = "https://api.anthropic.com"
+
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # Upload Rules
     MAX_UPLOAD_SIZE_MB: int = 25

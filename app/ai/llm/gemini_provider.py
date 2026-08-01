@@ -9,7 +9,7 @@ from app.core.config import settings
 
 
 class GeminiProvider(BaseLLMProvider):
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-1.5-flash"):
+    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-2.5-flash-lite"):
         self.api_key = api_key or settings.GEMINI_API_KEY
         if self.api_key:
             genai.configure(api_key=self.api_key)

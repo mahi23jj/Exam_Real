@@ -1,6 +1,5 @@
-import uuid
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, ConfigDict, Field
 from app.db.models.student_answer import ConfidenceLevel
 
 
@@ -18,9 +17,14 @@ class QuestionInitialRead(BaseModel):
     question_number: int
     question_text: str
     question_image_url: Optional[str] = None
+    page_number: Optional[int] = None
+    location: Dict[str, Any] = Field(default_factory=dict, validation_alias="location_json")
+    subtopic: Optional[str] = None
+    difficulty: Optional[str] = None
+    question_type: Optional[str] = None
     choices: List[ChoiceInitialRead]
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class AnswerSubmitRequest(BaseModel):

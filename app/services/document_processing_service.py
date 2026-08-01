@@ -10,16 +10,18 @@ from app.core.config import settings
 from app.db.models.document import Document, FileType, DocumentType, JobStatus
 from app.db.models.job import DocumentProcessingJob
 from app.db.models.content_block import ContentBlock, Embedding
-from app.db.models.exam import Exam, Question, Choice, QuestionContentBlockLink, AnswerSource
+from app.db.models.exam import Exam, PastExamQuestion, Choice, QuestionContentBlockLink, AnswerSource, Topic
 
 from app.ai.document_processing.pdf_parser import PDFParser
 from app.ai.document_processing.ppt_parser import PPTParser
 from app.ai.ocr.ocr_engine import OCREngine
 from app.ai.document_processing.chunker import SemanticChunker
 from app.ai.document_processing.exam_extractor import ExamExtractor
+from app.ai.document_processing.layout_matcher import LayoutMatcher
 from app.ai.embeddings.bge_m3_provider import BGEM3EmbeddingProvider
 from app.ai.vision.florence_provider import FlorenceVisionProvider
 from app.services.storage_service import StorageService
+from app.services.analytics_service import AnalyticsService
 from app.ai.retrieval.vector_store import VectorStoreRetriever
 
 logger = logging.getLogger(__name__)
@@ -108,6 +110,11 @@ class DocumentProcessingPipeline:
             # ── Step 6: Exam Extraction (if PAST_EXAM) ───────────────────────
             if document.doc_type == DocumentType.PAST_EXAM:
                 await self._extract_and_save_exam(document, job, pages, db_content_blocks)
+                
+                # ── Step 6.5: Analytics Update ───────────────────────────────────
+                await self._update_status(job, document, JobStatus.PROCESSING, "UPDATING_ANALYTICS")
+                analytics_service = AnalyticsService(self.session)
+                await analytics_service.update_course_analytics(document.course_id)
 
             # ── Step 7: Mark Complete ────────────────────────────────────────
             await self._update_status(job, document, JobStatus.COMPLETED, "COMPLETED")
@@ -216,7 +223,7 @@ class DocumentProcessingPipeline:
         pages: List[Dict[str, Any]],
         db_content_blocks: List[ContentBlock]
     ) -> None:
-        """Handles exam extraction, question/choice saving, and content block linking."""
+        """Handles exam extraction, topic normalization, question saving, and content block linking."""
         await self._update_status(job, document, JobStatus.PROCESSING, "EXTRACTING_EXAM_QUESTIONS")
 
         full_raw_text = "\n\n".join([p["text"] for p in pages if p.get("text")])
@@ -232,15 +239,56 @@ class DocumentProcessingPipeline:
         await self.session.commit()
         await self.session.refresh(exam_obj)
 
-        # Build question objects, preserving answer_source from extraction
+        # Normalize Topics
+        await self._update_status(job, document, JobStatus.PROCESSING, "NORMALIZING_TOPICS")
+        topic_cache = {}  # Cache by normalized_name
+
         questions_with_choices = []
         for q_data in extracted_exam.questions:
-            q_obj = Question(
+            # Topic Normalization
+            normalized_name = q_data.topic.strip().lower()
+            if normalized_name not in topic_cache:
+                stmt = select(Topic).where(
+                    Topic.course_id == document.course_id,
+                    Topic.normalized_name == normalized_name
+                )
+                existing_topic = (await self.session.execute(stmt)).scalar_one_or_none()
+                if not existing_topic:
+                    new_topic = Topic(
+                        course_id=document.course_id,
+                        name=q_data.topic.strip(),
+                        normalized_name=normalized_name
+                    )
+                    self.session.add(new_topic)
+                    await self.session.commit()
+                    await self.session.refresh(new_topic)
+                    topic_cache[normalized_name] = new_topic
+                else:
+                    topic_cache[normalized_name] = existing_topic
+
+            topic_obj = topic_cache[normalized_name]
+
+            # Match PDF Location
+            choice_texts = [c.choice_text for c in q_data.choices]
+            page_num, loc_json = LayoutMatcher.match_question_location(
+                question_text=q_data.question_text,
+                choice_texts=choice_texts,
+                pages=pages
+            )
+
+            q_obj = PastExamQuestion(
                 exam_id=exam_obj.id,
+                topic_id=topic_obj.id,
                 question_number=q_data.question_number,
                 question_text=q_data.question_text,
                 explanation=q_data.explanation,
+                subtopic=q_data.subtopic,
+                difficulty=q_data.difficulty,
+                question_type=q_data.question_type,
+                confidence=q_data.confidence,
                 answer_source=q_data.answer_source,
+                page_number=page_num,
+                location_json=loc_json,
                 metadata_json={}
             )
             questions_with_choices.append((q_obj, q_data.choices))
@@ -274,7 +322,7 @@ class DocumentProcessingPipeline:
 
     async def _link_questions_to_blocks(
         self,
-        question_objs: List[Question],
+        question_objs: List[PastExamQuestion],
         course_id: uuid.UUID
     ) -> None:
         """Semantically links each question to its top 2 ContentBlocks for traceability."""

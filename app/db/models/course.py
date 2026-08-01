@@ -3,6 +3,7 @@ from typing import Optional, List, TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.db.base import TimestampMixin, generate_uuid
+from app.db.models.social import Visibility
 
 if TYPE_CHECKING:
     from app.db.models.user import User
@@ -16,6 +17,8 @@ class Course(TimestampMixin, table=True):
     code: str = Field(unique=True, index=True, nullable=False, max_length=50)
     title: str = Field(nullable=False, max_length=255)
     description: Optional[str] = Field(default=None, nullable=True)
+    category: Optional[str] = Field(default=None, max_length=100, index=True, nullable=True)
+    visibility: Visibility = Field(default=Visibility.PUBLIC, nullable=False, index=True)
     created_by_user_id: uuid.UUID = Field(foreign_key="users.id", index=True, nullable=False)
     is_active: bool = Field(default=True, nullable=False)
 

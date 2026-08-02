@@ -1,0 +1,61 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 14% 98%; /* #FAFAF9 */
+    --foreground: 24 9% 10%; /* #1C1917 */
+    --card: 0 0% 100%;
+    --card-foreground: 24 9% 10%;
+    --primary: 174 77% 25%; /* #0F766E */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 173 80% 40%; /* #14B8A6 */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 24 5% 92%; /* #E7E5E4 */
+    --muted-foreground: 25 5% 31%; /* #57534E */
+    --border: 24 5% 91%; /* #E7E5E4 */
+    --radius: 1rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased selection:bg-teal-100 selection:text-teal-900;
+    background-image: url("https://www.transparenttextures.com/patterns/paper-fibers.png");
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/70 backdrop-blur-xl border border-white/20 shadow-sm;
+  }
+  .premium-shadow {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+  }
+  .premium-shadow-hover {
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.9); }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 3s ease-in-out infinite;
+}

@@ -45,6 +45,8 @@ alembic.ini
 dist/
 build/
 *.egg-info/
+Frontend/dist/
+Frontend/node_modules/
 
 # Logs and local DB
 *.log

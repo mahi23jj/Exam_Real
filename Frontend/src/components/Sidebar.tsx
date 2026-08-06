@@ -1,15 +1,28 @@
 import React from 'react';
 import { BookOpen, Rss, Users, User, Settings } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import NavigationItem from './NavigationItem';
 
+interface SidebarProps {
+  activePage?: string;
+}
+
 const navItems = [
-  { icon: BookOpen, label: 'Courses', active: true },
-  { icon: Rss, label: 'Feed', active: false },
-  { icon: Users, label: 'Community', active: false },
-  { icon: User, label: 'Profile', active: false },
+  { icon: BookOpen, label: 'Courses', path: '/' },
+  { icon: Rss, label: 'Feed', path: '/feed' },
+  { icon: Users, label: 'Community', path: '/community' },
+  { icon: User, label: 'Profile', path: '/profile' },
 ];
 
-const Sidebar: React.FC = () => {
+const Sidebar: React.FC<SidebarProps> = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isActive = (path: string) => {
+    if (path === '/') return location.pathname === '/' || location.pathname === '/courses';
+    return location.pathname.startsWith(path);
+  };
+
   return (
     <aside className="hidden lg:flex flex-col w-64 flex-shrink-0 bg-white/30 backdrop-blur-md border-r border-stone-200/50 h-screen sticky top-0 z-40">
       <div className="px-8 py-10">
@@ -28,7 +41,8 @@ const Sidebar: React.FC = () => {
             key={item.label}
             icon={item.icon}
             label={item.label}
-            active={item.active}
+            active={isActive(item.path)}
+            onClick={() => navigate(item.path)}
           />
         ))}
       </nav>

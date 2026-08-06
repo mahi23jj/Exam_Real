@@ -1,40 +1,45 @@
 import React from 'react';
-import { Heart, MessageCircle } from 'lucide-react';
+import { Heart, MessageCircle, MapPin } from 'lucide-react';
+import { motion } from 'framer-motion';
 import type { PinType, KnowledgePin } from '../../types/workspace';
 
 interface KnowledgePinCardProps {
   pin: KnowledgePin;
   compact?: boolean;
   isActive?: boolean;
+  showLocateAction?: boolean;
   onClick?: () => void;
 }
 
-const pinTypeLabels: Record<PinType, { label: string; color: string }> = {
-  memory_trick: { label: 'Memory Trick', color: 'bg-purple-50 text-purple-700' },
-  implementation_tip: { label: 'Implementation Tip', color: 'bg-blue-50 text-blue-700' },
-  exam_hint: { label: 'Exam Hint', color: 'bg-amber-50 text-amber-700' },
-  warning: { label: 'Warning', color: 'bg-rose-50 text-rose-700' },
-  explanation: { label: 'Explanation', color: 'bg-teal-50 text-teal-700' },
+const pinTypeConfig: Record<PinType, { label: string; emoji: string; color: string }> = {
+  memory_trick: { label: 'Memory Trick', emoji: '🧠', color: 'bg-purple-50 text-purple-700' },
+  implementation_tip: { label: 'Implementation Tip', emoji: '💡', color: 'bg-blue-50 text-blue-700' },
+  exam_hint: { label: 'Exam Hint', emoji: '📝', color: 'bg-amber-50 text-amber-700' },
+  warning: { label: 'Warning', emoji: '⚠️', color: 'bg-rose-50 text-rose-700' },
+  explanation: { label: 'Explanation', emoji: '📖', color: 'bg-teal-50 text-teal-700' },
 };
 
 const KnowledgePinCard: React.FC<KnowledgePinCardProps> = ({
   pin,
   compact = false,
   isActive = false,
+  showLocateAction = false,
   onClick,
 }) => {
-  const typeConfig = pinTypeLabels[pin.type];
+  const typeConfig = pinTypeConfig[pin.type];
 
   return (
-    <button
+    <motion.button
+      whileHover={{ y: -2 }}
       onClick={onClick}
       className={`w-full text-left rounded-xl border transition-all duration-200 ${
         isActive
           ? 'border-teal-200 bg-teal-50/50 ring-1 ring-teal-200/40'
-          : 'border-stone-100 bg-white hover:border-stone-200 hover:bg-stone-50/50'
+          : 'border-stone-100 bg-white hover:border-stone-200 hover:premium-shadow'
       } ${compact ? 'p-3' : 'p-4'}`}
     >
       <div className="flex items-center gap-2 mb-2">
+        <span className="text-sm">{typeConfig.emoji}</span>
         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${typeConfig.color}`}>
           {typeConfig.label}
         </span>
@@ -53,9 +58,17 @@ const KnowledgePinCard: React.FC<KnowledgePinCardProps> = ({
           <div className="w-5 h-5 rounded-full bg-stone-100 flex items-center justify-center text-[8px] font-bold text-stone-500">
             {pin.author.initials}
           </div>
-          <span className="text-xs text-stone-500 font-medium">{pin.author.name}</span>
+          <span className="text-xs text-stone-500 font-medium">
+            {pin.author.name} · {pin.createdAt}
+          </span>
         </div>
         <div className="flex items-center gap-3 text-stone-400">
+          {showLocateAction && (
+            <span className="flex items-center gap-1 text-xs font-semibold text-teal-700">
+              <MapPin className="w-3 h-3" />
+              Locate
+            </span>
+          )}
           <span className="flex items-center gap-1 text-xs">
             <Heart className="w-3 h-3" />
             {pin.likes}
@@ -68,7 +81,7 @@ const KnowledgePinCard: React.FC<KnowledgePinCardProps> = ({
           )}
         </div>
       </div>
-    </button>
+    </motion.button>
   );
 };
 

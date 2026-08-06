@@ -1,28 +1,76 @@
 import React from 'react';
 import PDFViewer from './PDFViewer';
 import PastExamViewer from './PastExamViewer';
-import type { CourseDocument } from '../../types/workspace';
+import SplitLearningCenter from './SplitLearningCenter';
+import type {
+  CourseDocument,
+  NoteDocument,
+  ExamQuestion,
+  ExamHistoryItem,
+  LocateTarget,
+  SplitViewMode,
+} from '../../types/workspace';
 import type { TextSelection } from '../../types/workspace';
 
 interface DocumentViewerProps {
   document: CourseDocument | null;
+  documents: Record<string, CourseDocument>;
   highlightSectionId?: string | null;
+  locateTarget?: LocateTarget | null;
   activeQuestionId?: string | null;
+  jumpToQuestionId?: string | null;
+  splitMode: SplitViewMode;
+  practiceQuestion: ExamQuestion | null;
+  practiceSelectedIndex: number | null;
+  examHistory: ExamHistoryItem[];
   onTextSelect: (selection: TextSelection) => void;
   onPinClick: (pinId: string) => void;
   onQuestionClick: (questionId: string) => void;
   onPracticeQuestion: (questionId: string) => void;
+  onSetSplitMode: (mode: SplitViewMode) => void;
+  onCloseSplit: () => void;
 }
 
 const DocumentViewer: React.FC<DocumentViewerProps> = ({
   document,
+  documents,
   highlightSectionId,
+  locateTarget,
   activeQuestionId,
+  jumpToQuestionId,
+  splitMode,
+  practiceQuestion,
+  practiceSelectedIndex,
+  examHistory,
   onTextSelect,
   onPinClick,
   onQuestionClick,
   onPracticeQuestion,
+  onSetSplitMode,
+  onCloseSplit,
 }) => {
+  if (
+    (splitMode === 'split' || splitMode === 'expanded_note') &&
+    practiceQuestion &&
+    practiceSelectedIndex !== null
+  ) {
+    const noteDoc = practiceQuestion.noteReference
+      ? (documents[practiceQuestion.noteReference.documentId] as NoteDocument | undefined)
+      : undefined;
+
+    return (
+      <SplitLearningCenter
+        question={practiceQuestion}
+        selectedIndex={practiceSelectedIndex}
+        noteDocument={noteDoc ?? null}
+        highlightSectionId={highlightSectionId ?? practiceQuestion.noteReference?.sectionId ?? null}
+        splitMode={splitMode}
+        onSetSplitMode={onSetSplitMode}
+        onCloseSplit={onCloseSplit}
+      />
+    );
+  }
+
   if (!document) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -45,6 +93,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
         <PDFViewer
           document={document}
           highlightSectionId={highlightSectionId}
+          locateTarget={locateTarget}
           onTextSelect={onTextSelect}
           onPinClick={onPinClick}
           onQuestionClick={onQuestionClick}
@@ -54,6 +103,8 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
           document={document}
           onPracticeQuestion={onPracticeQuestion}
           activeQuestionId={activeQuestionId}
+          jumpToQuestionId={jumpToQuestionId}
+          history={examHistory}
         />
       )}
     </div>

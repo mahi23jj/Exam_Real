@@ -25,9 +25,13 @@ export type ContextPanelMode =
   | 'question_detail'
   | 'ai_tutor'
   | 'practice'
-  | 'answered';
+  | 'answered'
+  | 'create_pin'
+  | 'create_question';
 
-export type SplitViewMode = 'question_only' | 'notes_only' | 'split';
+export type NotesChipTab = 'guide' | 'pins' | 'questions';
+
+export type SplitViewMode = 'question_only' | 'notes_only' | 'split' | 'expanded_note';
 
 export interface Author {
   id: string;
@@ -53,6 +57,7 @@ export interface KnowledgePin {
   replies: Comment[];
   anchorText: string;
   documentId: string;
+  createdAt: string;
   pageIndex?: number;
 }
 
@@ -64,6 +69,7 @@ export interface PublicQuestion {
   likes: number;
   replies: Comment[];
   documentId: string;
+  createdAt: string;
 }
 
 export interface ExamQuestion {
@@ -145,4 +151,32 @@ export interface PracticeState {
   questionId: string;
   selectedIndex: number | null;
   submitted: boolean;
+}
+
+export interface LocateTarget {
+  anchorText: string;
+  type: 'pin' | 'question';
+}
+
+export interface ExamHistoryItem {
+  questionId: string;
+  questionNumber: number;
+  questionText: string;
+  answeredAt: string;
+  wasCorrect: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'ai';
+  content: string;
+  timestamp: string;
+}
+
+export interface ChatConversation {
+  id: string;
+  preview: string;
+  dateGroup: 'Today' | 'Yesterday' | 'This Week' | 'Older';
+  timestamp: string;
+  messages: ChatMessage[];
 }

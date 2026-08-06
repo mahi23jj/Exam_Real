@@ -7,7 +7,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 
 import Courses from './src/pages/Courses';
 import CourseWorkspace from './src/pages/CourseWorkspace';
+import Feed from './src/pages/Feed';
 import NotFound from './src/pages/NotFound';
+import Community from './src/pages/Community';
+import Profile from './src/pages/Profile';
 
 const App: React.FC = () => {
   return (
@@ -18,6 +21,9 @@ const App: React.FC = () => {
             {/* Set Courses as the default landing page for the preview */}
             <Route path="/" element={<Courses />} />
             <Route path="/courses" element={<Navigate to="/" replace />} />
+            <Route path="/feed" element={<Feed />} />
+            <Route path="/community" element={<Community />} />
+            <Route path="/profile" element={<Profile />} />
             <Route path="/course/:courseId" element={<CourseWorkspace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

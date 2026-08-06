@@ -2,17 +2,21 @@ import { useReducer, useCallback, useEffect } from 'react';
 import type {
   WorkspacePhase,
   ContextPanelMode,
+  NotesChipTab,
   SplitViewMode,
   TextSelection,
   PracticeState,
   KnowledgePin,
   PublicQuestion,
   CourseDocument,
+  LocateTarget,
+  ExamHistoryItem,
 } from '../types/workspace';
 
 export interface WorkspaceState {
   phase: WorkspacePhase;
   contextMode: ContextPanelMode;
+  notesTab: NotesChipTab;
   activeDocumentId: string | null;
   activeDocument: CourseDocument | null;
   selection: TextSelection | null;
@@ -20,6 +24,9 @@ export interface WorkspaceState {
   selectedQuestionId: string | null;
   practice: PracticeState | null;
   splitMode: SplitViewMode;
+  locateTarget: LocateTarget | null;
+  examHistory: ExamHistoryItem[];
+  chatHistoryOpen: boolean;
   focusMode: boolean;
   explorerOpen: boolean;
   contextOpen: boolean;
@@ -31,15 +38,19 @@ type WorkspaceAction =
   | { type: 'OPEN_DOCUMENT'; documentId: string; document: CourseDocument }
   | { type: 'SELECT_TEXT'; selection: TextSelection }
   | { type: 'CLEAR_SELECTION' }
+  | { type: 'SET_NOTES_TAB'; tab: NotesChipTab }
+  | { type: 'LOCATE_IN_DOCUMENT'; target: LocateTarget }
+  | { type: 'CLEAR_LOCATE' }
   | { type: 'OPEN_PIN'; pinId: string }
   | { type: 'OPEN_PUBLIC_QUESTION'; questionId: string }
   | { type: 'START_PRACTICE'; questionId: string }
   | { type: 'SELECT_ANSWER'; index: number }
-  | { type: 'SUBMIT_ANSWER' }
+  | { type: 'SUBMIT_ANSWER'; historyItem: ExamHistoryItem }
   | { type: 'OPEN_SPLIT_LEARNING' }
   | { type: 'SET_SPLIT_MODE'; mode: SplitViewMode }
   | { type: 'CLOSE_SPLIT' }
   | { type: 'SET_CONTEXT_MODE'; mode: ContextPanelMode }
+  | { type: 'SET_CHAT_HISTORY_OPEN'; open: boolean }
   | { type: 'TOGGLE_FOCUS' }
   | { type: 'SET_FOCUS'; enabled: boolean }
   | { type: 'TOGGLE_FOLDER'; folderId: string }
@@ -49,7 +60,7 @@ type WorkspaceAction =
   | { type: 'RESET_CONTEXT' };
 
 function derivePhase(state: WorkspaceState): WorkspacePhase {
-  if (state.splitMode !== 'question_only' && state.phase === 'split_learning') {
+  if (state.splitMode === 'split' || state.splitMode === 'expanded_note' || state.splitMode === 'notes_only') {
     return 'split_learning';
   }
   if (state.practice?.submitted) return 'submitted';
@@ -75,26 +86,34 @@ function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): Works
         activeDocument: action.document,
         phase: isNote ? 'reading_notes' : 'reading_past_exam',
         contextMode: getInitialContextMode(action.document),
+        notesTab: 'guide',
         selection: null,
         selectedPinId: null,
         selectedQuestionId: null,
         practice: null,
         splitMode: 'question_only',
+        locateTarget: null,
         mobileView: 'document',
       };
     }
     case 'SELECT_TEXT':
-      return {
-        ...state,
-        selection: action.selection,
-        phase: 'text_selected',
-      };
+      return { ...state, selection: action.selection, phase: 'text_selected' };
     case 'CLEAR_SELECTION':
       return {
         ...state,
         selection: null,
         phase: state.activeDocument?.type === 'note' ? 'reading_notes' : state.phase,
       };
+    case 'SET_NOTES_TAB':
+      return { ...state, notesTab: action.tab, contextMode: 'notes_context' };
+    case 'LOCATE_IN_DOCUMENT':
+      return {
+        ...state,
+        locateTarget: action.target,
+        mobileView: 'document',
+      };
+    case 'CLEAR_LOCATE':
+      return { ...state, locateTarget: null };
     case 'OPEN_PIN':
       return {
         ...state,
@@ -118,15 +137,13 @@ function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): Works
         contextMode: 'practice',
         contextOpen: true,
         selection: null,
+        splitMode: 'question_only',
         phase: 'practice_question',
         mobileView: 'context',
       };
     case 'SELECT_ANSWER':
       if (!state.practice || state.practice.submitted) return state;
-      return {
-        ...state,
-        practice: { ...state.practice, selectedIndex: action.index },
-      };
+      return { ...state, practice: { ...state.practice, selectedIndex: action.index } };
     case 'SUBMIT_ANSWER':
       if (!state.practice) return state;
       return {
@@ -134,23 +151,20 @@ function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): Works
         practice: { ...state.practice, submitted: true },
         contextMode: 'answered',
         phase: 'submitted',
+        examHistory: [action.historyItem, ...state.examHistory].slice(0, 5),
       };
     case 'OPEN_SPLIT_LEARNING':
-      return {
-        ...state,
-        splitMode: 'split',
-        phase: 'split_learning',
-        contextOpen: true,
-      };
+      return { ...state, splitMode: 'split', phase: 'split_learning', contextOpen: true };
     case 'SET_SPLIT_MODE':
       return {
         ...state,
         splitMode: action.mode,
-        phase: action.mode === 'question_only' && !state.practice?.submitted
-          ? state.phase
-          : action.mode === 'split'
-            ? 'split_learning'
-            : state.phase,
+        phase:
+          action.mode === 'question_only' && state.practice?.submitted
+            ? 'submitted'
+            : action.mode !== 'question_only'
+              ? 'split_learning'
+              : state.phase,
       };
     case 'CLOSE_SPLIT':
       return {
@@ -160,6 +174,8 @@ function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): Works
       };
     case 'SET_CONTEXT_MODE':
       return { ...state, contextMode: action.mode };
+    case 'SET_CHAT_HISTORY_OPEN':
+      return { ...state, chatHistoryOpen: action.open };
     case 'TOGGLE_FOCUS':
       return { ...state, focusMode: !state.focusMode };
     case 'SET_FOCUS':
@@ -180,6 +196,7 @@ function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): Works
       return {
         ...state,
         contextMode: getInitialContextMode(state.activeDocument),
+        notesTab: 'guide',
         selectedPinId: null,
         selectedQuestionId: null,
         selection: null,
@@ -197,6 +214,7 @@ export function useWorkspaceState(
   const initialState: WorkspaceState = {
     phase: initialDocument ? (initialDocument.type === 'note' ? 'reading_notes' : 'reading_past_exam') : 'idle',
     contextMode: getInitialContextMode(initialDocument),
+    notesTab: 'guide',
     activeDocumentId: initialDocumentId,
     activeDocument: initialDocument,
     selection: null,
@@ -204,6 +222,9 @@ export function useWorkspaceState(
     selectedQuestionId: null,
     practice: null,
     splitMode: 'question_only',
+    locateTarget: null,
+    examHistory: [],
+    chatHistoryOpen: false,
     focusMode: false,
     explorerOpen: true,
     contextOpen: true,
@@ -223,11 +244,18 @@ export function useWorkspaceState(
       }
       if (e.key === 'Escape') {
         dispatch({ type: 'CLEAR_SELECTION' });
+        dispatch({ type: 'SET_CHAT_HISTORY_OPEN', open: false });
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (!state.locateTarget) return;
+    const timer = setTimeout(() => dispatch({ type: 'CLEAR_LOCATE' }), 3000);
+    return () => clearTimeout(timer);
+  }, [state.locateTarget]);
 
   const openDocument = useCallback((documentId: string, document: CourseDocument) => {
     dispatch({ type: 'OPEN_DOCUMENT', documentId, document });
@@ -241,8 +269,12 @@ export function useWorkspaceState(
     dispatch({ type: 'CLEAR_SELECTION' });
   }, []);
 
+  const locateInDocument = useCallback((target: LocateTarget) => {
+    dispatch({ type: 'LOCATE_IN_DOCUMENT', target });
+  }, []);
+
   const openPin = useCallback((pinId: string) => {
-    dispatch({ type: 'OPEN_PIN', pinId: pinId });
+    dispatch({ type: 'OPEN_PIN', pinId });
   }, []);
 
   const openPublicQuestion = useCallback((questionId: string) => {
@@ -257,8 +289,8 @@ export function useWorkspaceState(
     dispatch({ type: 'SELECT_ANSWER', index });
   }, []);
 
-  const submitAnswer = useCallback(() => {
-    dispatch({ type: 'SUBMIT_ANSWER' });
+  const submitAnswer = useCallback((historyItem: ExamHistoryItem) => {
+    dispatch({ type: 'SUBMIT_ANSWER', historyItem });
   }, []);
 
   const openSplitLearning = useCallback(() => {
@@ -281,6 +313,7 @@ export function useWorkspaceState(
     openDocument,
     selectText,
     clearSelection,
+    locateInDocument,
     openPin,
     openPublicQuestion,
     startPractice,

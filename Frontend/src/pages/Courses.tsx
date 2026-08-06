@@ -4,11 +4,10 @@ import { Plus, Sparkles } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import Sidebar from '../components/Sidebar';
-import MobileNav from '../components/MobileNav';
+import AppLayout from '../components/layout/AppLayout';
 import SearchBar from '../components/SearchBars';
 import ContinueCard, { type ContinueItemType } from '../components/ContinueCard';
-import CourseTabs, { type TabValue } from '../components/CourseTabs';
+import Tabs, { type TabItem } from '../components/ui/Tabs';
 import CourseCard from '../components/CourseCard';
 import EmptyState from '../components/EmptyState';
 import CreateCourseModal from '../components/CreateCourseModal';
@@ -20,7 +19,7 @@ const courseRouteMap: Record<string, string> = {
 const Courses: React.FC = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<TabValue>('explore');
+  const [activeTab, setActiveTab] = useState<'explore' | 'following' | 'mine'>('explore');
   const [modalOpen, setModalOpen] = useState(false);
   const [greeting, setGreeting] = useState('');
 
@@ -64,6 +63,12 @@ const Courses: React.FC = () => {
     mine: courses.mine.length,
   };
 
+  const tabsItems: TabItem<'explore' | 'following' | 'mine'>[] = [
+    { id: 'explore', label: 'Explore', count: counts.explore },
+    { id: 'following', label: 'Following', count: counts.following },
+    { id: 'mine', label: 'My Courses', count: counts.mine },
+  ];
+
   const openCourse = (title: string) => {
     const courseId = courseRouteMap[title];
     if (courseId) {
@@ -86,12 +91,9 @@ const Courses: React.FC = () => {
   );
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-
-      <div className="flex-1 min-w-0 flex flex-col pb-24 lg:pb-0">
-        {/* Top Header */}
-        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-stone-200/50">
+    <AppLayout>
+      {/* Top Header */}
+      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-stone-200/50">
           <div className="max-w-7xl mx-auto px-6 lg:px-10 py-4 flex items-center gap-6">
             <div className="flex-1">
               <SearchBar value={search} onChange={setSearch} />
@@ -144,7 +146,7 @@ const Courses: React.FC = () => {
           {/* Tabs & Content */}
           <section>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-10">
-              <CourseTabs active={activeTab} onChange={setActiveTab} counts={counts} />
+              <Tabs activeTab={activeTab} onChange={setActiveTab} tabs={tabsItems} layoutId="courseTabs" />
               <div className="sm:hidden">
                 <button
                   onClick={() => setModalOpen(true)}
@@ -194,18 +196,15 @@ const Courses: React.FC = () => {
             </AnimatePresence>
           </section>
         </main>
-      </div>
-
-      <MobileNav />
-      <CreateCourseModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onCreate={(data) => {
-          setModalOpen(false);
-          toast.success(`Created ${data.name}`);
-        }}
-      />
-    </div>
+        <CreateCourseModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onCreate={(data) => {
+            setModalOpen(false);
+            toast.success(`Created ${data.name}`);
+          }}
+        />
+      </AppLayout>
   );
 };
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -6,7 +6,14 @@ import { X } from 'lucide-react';
 
 import { getWorkspaceData } from '../data/workspaceMockData';
 import { useWorkspaceState } from '../hooks/useWorkspaceState';
-import type { PastExamDocument, ExamQuestion } from '../types/workspace';
+import type {
+  PastExamDocument,
+  ExamQuestion,
+  NoteDocument,
+  KnowledgePin,
+  PublicQuestion,
+  ChatConversation,
+} from '../types/workspace';
 
 import CourseHeader from '../components/workspace/CourseHeader';
 import CourseExplorer from '../components/workspace/CourseExplorer';
@@ -14,6 +21,30 @@ import DocumentViewer from '../components/workspace/DocumentViewer';
 import ContextPanel from '../components/workspace/ContextPanel';
 import FloatingSelectionToolbar from '../components/workspace/FloatingSelectionToolbar';
 import FocusModeLayout from '../components/workspace/FocusModeLayout';
+import ChatHistoryDrawer from '../components/workspace/ChatHistoryDrawer';
+
+const MOCK_CHAT_HISTORY: ChatConversation[] = [
+  {
+    id: 'c1',
+    preview: 'Why does priority scheduling cause starvation?',
+    dateGroup: 'Today',
+    timestamp: '2h ago',
+    messages: [
+      { id: 'm1', role: 'user', content: 'Why does priority scheduling cause starvation?', timestamp: '2h ago' },
+      { id: 'm2', role: 'ai', content: 'High-priority processes can continuously preempt lower-priority ones, preventing them from ever running.', timestamp: '2h ago' },
+    ],
+  },
+  {
+    id: 'c2',
+    preview: 'Explain page fault handling',
+    dateGroup: 'Yesterday',
+    timestamp: '1d ago',
+    messages: [
+      { id: 'm3', role: 'user', content: 'Explain page fault handling', timestamp: '1d ago' },
+      { id: 'm4', role: 'ai', content: 'When a page is not in memory, the OS loads it from disk into a free frame and updates the page table.', timestamp: '1d ago' },
+    ],
+  },
+];
 
 const CourseWorkspace: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -33,8 +64,7 @@ const CourseWorkspace: React.FC = () => {
     openDocument,
     selectText,
     clearSelection,
-    openPin,
-    openPublicQuestion,
+    locateInDocument,
     startPractice,
     selectAnswer,
     submitAnswer,
@@ -44,6 +74,24 @@ const CourseWorkspace: React.FC = () => {
   } = useWorkspaceState(initialDocId, initialDoc, defaultOpenFolders);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [jumpToQuestionId, setJumpToQuestionId] = useState<string | null>(null);
+  const [localPins, setLocalPins] = useState<KnowledgePin[]>([]);
+  const [localQuestions, setLocalQuestions] = useState<PublicQuestion[]>([]);
+
+  const activeNoteDoc = useMemo(() => {
+    if (state.activeDocument?.type !== 'note') return null;
+    const base = state.activeDocument as NoteDocument;
+    return {
+      ...base,
+      pins: [...base.pins, ...localPins.filter((p) => p.documentId === base.id)],
+      questions: [...base.questions, ...localQuestions.filter((q) => q.documentId === base.id)],
+    };
+  }, [state.activeDocument, localPins, localQuestions]);
+
+  const activeDocument = useMemo(() => {
+    if (state.activeDocument?.type === 'note' && activeNoteDoc) return activeNoteDoc;
+    return state.activeDocument;
+  }, [state.activeDocument, activeNoteDoc]);
 
   if (!courseData) {
     return <Navigate to="/" replace />;
@@ -56,31 +104,85 @@ const CourseWorkspace: React.FC = () => {
   }, [state.practice, state.activeDocument]);
 
   const highlightSectionId = useMemo(() => {
-    if (state.splitMode === 'split' || state.contextMode === 'answered') {
-      return practiceQuestion?.noteReference?.sectionId ?? null;
+    if (state.splitMode !== 'question_only' && practiceQuestion?.noteReference) {
+      return practiceQuestion.noteReference.sectionId;
     }
     return null;
-  }, [state.splitMode, state.contextMode, practiceQuestion]);
+  }, [state.splitMode, practiceQuestion]);
 
   const handleFileSelect = (documentId: string) => {
     const doc = courseData.documents[documentId];
-    if (doc) openDocument(documentId, doc);
+    if (doc) {
+      setLocalPins([]);
+      setLocalQuestions([]);
+      openDocument(documentId, doc);
+    }
   };
 
   const handlePinFromSelection = () => {
-    toast.success('Knowledge pin created', { className: 'premium-shadow rounded-2xl border-none' });
-    clearSelection();
+    dispatch({ type: 'SET_CONTEXT_MODE', mode: 'create_pin' });
+    dispatch({ type: 'SET_CONTEXT_OPEN', open: true });
   };
 
   const handleAskQuestion = () => {
-    toast.info('Question posted', { className: 'premium-shadow rounded-2xl border-none' });
-    clearSelection();
+    dispatch({ type: 'SET_CONTEXT_MODE', mode: 'create_question' });
+    dispatch({ type: 'SET_CONTEXT_OPEN', open: true });
   };
 
   const handleAskAI = () => {
     dispatch({ type: 'SET_CONTEXT_MODE', mode: 'ai_tutor' });
     dispatch({ type: 'SET_CONTEXT_OPEN', open: true });
-    clearSelection();
+  };
+
+  const handleSavePin = useCallback(
+    (data: { type: KnowledgePin['type']; note: string; anchorText: string }) => {
+      if (!state.activeDocumentId) return;
+      const pin: KnowledgePin = {
+        id: `pin-local-${Date.now()}`,
+        type: data.type,
+        content: data.note || data.anchorText,
+        author: { id: '2', name: 'Alex', initials: 'AL' },
+        likes: 0,
+        replies: [],
+        anchorText: data.anchorText,
+        documentId: state.activeDocumentId,
+        createdAt: 'Just now',
+      };
+      setLocalPins((prev) => [...prev, pin]);
+      clearSelection();
+      dispatch({ type: 'SET_NOTES_TAB', tab: 'pins' });
+      toast.success('Knowledge pin saved', { className: 'premium-shadow rounded-2xl border-none' });
+    },
+    [state.activeDocumentId, clearSelection, dispatch],
+  );
+
+  const handlePostQuestion = useCallback(
+    (data: { anchorText: string; content: string }) => {
+      if (!state.activeDocumentId) return;
+      const question: PublicQuestion = {
+        id: `pq-local-${Date.now()}`,
+        anchorText: data.anchorText,
+        content: data.content,
+        author: { id: '2', name: 'Alex', initials: 'AL' },
+        likes: 0,
+        replies: [],
+        documentId: state.activeDocumentId,
+        createdAt: 'Just now',
+      };
+      setLocalQuestions((prev) => [...prev, question]);
+      clearSelection();
+      dispatch({ type: 'SET_NOTES_TAB', tab: 'questions' });
+      toast.success('Question posted', { className: 'premium-shadow rounded-2xl border-none' });
+    },
+    [state.activeDocumentId, clearSelection, dispatch],
+  );
+
+  const handleLocatePin = (pin: KnowledgePin) => {
+    locateInDocument({ anchorText: pin.anchorText, type: 'pin' });
+  };
+
+  const handleLocateQuestion = (question: PublicQuestion) => {
+    locateInDocument({ anchorText: question.anchorText, type: 'question' });
   };
 
   const handleOpenNote = () => {
@@ -88,8 +190,18 @@ const CourseWorkspace: React.FC = () => {
   };
 
   const handleSubmit = () => {
-    if (state.practice?.selectedIndex === null) return;
-    submitAnswer();
+    if (!state.practice || state.practice.selectedIndex === null || !practiceQuestion) return;
+    submitAnswer({
+      questionId: practiceQuestion.id,
+      questionNumber: practiceQuestion.number,
+      questionText: practiceQuestion.text,
+      answeredAt: 'Just now',
+      wasCorrect: state.practice.selectedIndex === practiceQuestion.correctIndex,
+    });
+  };
+
+  const handleCloseSplit = () => {
+    dispatch({ type: 'CLOSE_SPLIT' });
   };
 
   const explorerPanel = (
@@ -109,42 +221,51 @@ const CourseWorkspace: React.FC = () => {
     <aside className="w-full h-full border-l border-stone-200/60 bg-white/80 backdrop-blur-sm">
       <ContextPanel
         mode={state.contextMode}
-        activeDocument={state.activeDocument}
-        documents={courseData.documents}
-        selectedPinId={state.selectedPinId}
-        selectedQuestionId={state.selectedQuestionId}
+        notesTab={state.notesTab}
+        activeDocument={activeDocument}
+        selection={state.selection}
         practiceQuestion={practiceQuestion}
         practiceSelectedIndex={state.practice?.selectedIndex ?? null}
         practiceSubmitted={state.practice?.submitted ?? false}
-        splitMode={state.splitMode}
-        highlightSectionId={highlightSectionId}
+        onNotesTabChange={(tab) => dispatch({ type: 'SET_NOTES_TAB', tab })}
         onSelectAnswer={selectAnswer}
         onSubmitAnswer={handleSubmit}
         onOpenNote={handleOpenNote}
-        onSetSplitMode={setSplitMode}
-        onPinClick={openPin}
-        onPublicQuestionClick={openPublicQuestion}
+        onOpenChatHistory={() => dispatch({ type: 'SET_CHAT_HISTORY_OPEN', open: true })}
+        onLocatePin={handleLocatePin}
+        onLocateQuestion={handleLocateQuestion}
         onSetMode={(mode) => dispatch({ type: 'SET_CONTEXT_MODE', mode })}
+        onSavePin={handleSavePin}
+        onPostQuestion={handlePostQuestion}
       />
     </aside>
   );
 
   const documentPanel = (
     <DocumentViewer
-      document={state.activeDocument}
+      document={activeDocument}
+      documents={courseData.documents}
       highlightSectionId={highlightSectionId}
+      locateTarget={state.locateTarget}
       activeQuestionId={state.practice?.questionId ?? null}
+      jumpToQuestionId={jumpToQuestionId}
+      splitMode={state.splitMode}
+      practiceQuestion={practiceQuestion}
+      practiceSelectedIndex={state.practice?.selectedIndex ?? null}
+      examHistory={state.examHistory}
       onTextSelect={selectText}
-      onPinClick={openPin}
-      onQuestionClick={openPublicQuestion}
+      onPinClick={() => {}}
+      onQuestionClick={() => {}}
       onPracticeQuestion={startPractice}
+      onSetSplitMode={setSplitMode}
+      onCloseSplit={handleCloseSplit}
     />
   );
 
   const header = (
     <CourseHeader
       courseName={courseData.name}
-      documentName={state.activeDocument?.name}
+      documentName={activeDocument?.name}
       focusMode={state.focusMode}
       onToggleFocus={() => dispatch({ type: 'TOGGLE_FOCUS' })}
       onToggleExplorer={() => dispatch({ type: 'SET_EXPLORER_OPEN', open: !state.explorerOpen })}
@@ -156,7 +277,7 @@ const CourseWorkspace: React.FC = () => {
 
   const floatingToolbar = (
     <FloatingSelectionToolbar
-      selection={state.activeDocument?.type === 'note' ? state.selection : null}
+      selection={activeDocument?.type === 'note' ? state.selection : null}
       onPin={handlePinFromSelection}
       onAskQuestion={handleAskQuestion}
       onAskAI={handleAskAI}
@@ -165,7 +286,12 @@ const CourseWorkspace: React.FC = () => {
 
   return (
     <>
-      {/* Desktop / Tablet layout */}
+      <ChatHistoryDrawer
+        open={state.chatHistoryOpen}
+        onClose={() => dispatch({ type: 'SET_CHAT_HISTORY_OPEN', open: false })}
+        conversations={MOCK_CHAT_HISTORY}
+      />
+
       <div className="hidden md:block h-screen">
         <FocusModeLayout
           focusMode={state.focusMode}
@@ -186,14 +312,11 @@ const CourseWorkspace: React.FC = () => {
         />
       </div>
 
-      {/* Mobile layout */}
       <div className="md:hidden h-screen flex flex-col overflow-hidden">
         {header}
-
         <div className="flex-1 min-h-0 relative">
           {state.mobileView === 'document' && documentPanel}
         </div>
-
         <nav className="flex-shrink-0 border-t border-stone-200 bg-white/90 backdrop-blur-xl">
           <div className="flex">
             {(['explorer', 'document', 'context'] as const).map((view) => (
@@ -201,9 +324,7 @@ const CourseWorkspace: React.FC = () => {
                 key={view}
                 onClick={() => dispatch({ type: 'SET_MOBILE_VIEW', view })}
                 className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${
-                  state.mobileView === view
-                    ? 'text-teal-700 border-t-2 border-teal-600'
-                    : 'text-stone-400'
+                  state.mobileView === view ? 'text-teal-700 border-t-2 border-teal-600' : 'text-stone-400'
                 }`}
               >
                 {view}
@@ -211,7 +332,6 @@ const CourseWorkspace: React.FC = () => {
             ))}
           </div>
         </nav>
-
         <AnimatePresence>
           {state.mobileView === 'explorer' && (
             <MobileOverlay onClose={() => dispatch({ type: 'SET_MOBILE_VIEW', view: 'document' })}>
@@ -224,7 +344,6 @@ const CourseWorkspace: React.FC = () => {
             </MobileOverlay>
           )}
         </AnimatePresence>
-
         {floatingToolbar}
       </div>
     </>

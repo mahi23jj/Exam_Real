@@ -25,6 +25,7 @@ const memoryManagementPins: KnowledgePin[] = [
     ],
     anchorText: 'page table maps virtual pages to physical frames',
     documentId: 'note-memory-management',
+    createdAt: '3d ago',
     pageIndex: 0,
   },
   {
@@ -36,6 +37,7 @@ const memoryManagementPins: KnowledgePin[] = [
     replies: [],
     anchorText: 'page fault occurs when a page is not in memory',
     documentId: 'note-memory-management',
+    createdAt: '1w ago',
     pageIndex: 0,
   },
   {
@@ -47,6 +49,7 @@ const memoryManagementPins: KnowledgePin[] = [
     replies: [],
     anchorText: 'external fragmentation',
     documentId: 'note-chapter-1',
+    createdAt: '5d ago',
     pageIndex: 1,
   },
 ];
@@ -77,6 +80,7 @@ const memoryManagementQuestions: PublicQuestion[] = [
       },
     ],
     documentId: 'note-memory-management',
+    createdAt: '2d ago',
   },
 ];
 
@@ -232,6 +236,7 @@ export const operatingSystemsWorkspace: CourseWorkspaceData = {
               replies: [],
               anchorText: 'Priority Scheduling',
               documentId: 'exam-2025',
+              createdAt: '4d ago',
             },
           ],
           publicQuestions: [
@@ -251,6 +256,7 @@ export const operatingSystemsWorkspace: CourseWorkspaceData = {
                 },
               ],
               documentId: 'exam-2025',
+              createdAt: '1w ago',
             },
           ],
         },

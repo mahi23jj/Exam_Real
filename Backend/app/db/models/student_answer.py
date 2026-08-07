@@ -7,7 +7,7 @@ from app.db.base import TimestampMixin, generate_uuid
 
 if TYPE_CHECKING:
     from app.db.models.user import User
-    from app.db.models.exam import Question, Choice
+    from app.db.models.exam import PastExamQuestion, Choice
 
 
 class ConfidenceLevel(str, enum.Enum):
@@ -31,5 +31,5 @@ class StudentAnswer(TimestampMixin, table=True):
 
     # Relationships
     student: Optional["User"] = Relationship()
-    question: Optional["Question"] = Relationship()
+    question: Optional["PastExamQuestion"] = Relationship()
     selected_choice: Optional["Choice"] = Relationship()

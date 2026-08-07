@@ -1,67 +1,17 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Form
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from app.core.dependencies import get_current_user
+from app.auth.dependencies import get_current_user
 from app.db.models.user import User
 from app.db.session import get_db
-from app.schemas.auth import LoginRequest, RefreshTokenRequest, Token
-from app.schemas.user import UserCreate, UserRead
-from app.services.auth_service import AuthService
-
-from fastapi import APIRouter, Depends
-from fastapi.security import OAuth2PasswordRequestForm
-
-router = APIRouter()
+from app.schemas.user import UserRead
+from app.auth.auth_service import Auth0AuthService
+from app.auth.exceptions import MissingAuthorizationHeaderException
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-
-@router.post(
-    "/register",
-    response_model=UserRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="Register a new user"
-)
-async def register(
-    user_in: UserCreate,
-    db: AsyncSession = Depends(get_db)
-) -> UserRead:
-    """Registers a new user (Student or Instructor) in StudyLoop AI."""
-    auth_service = AuthService(db)
-    user = await auth_service.register_user(user_in)
-    return user
-
-
-@router.post(
-    "/login",
-    response_model=Token,
-    status_code=status.HTTP_200_OK,
-    summary="User login to obtain JWT access & refresh tokens"
-)
-async def login(
-    login_in: LoginRequest,
-    db: AsyncSession = Depends(get_db)
-) -> Token:
-    """Authenticates user credentials and returns JWT access and refresh tokens."""
-    auth_service = AuthService(db)
-    tokens = await auth_service.authenticate_user(login_in)
-    return tokens
-
-
-@router.post(
-    "/refresh",
-    response_model=Token,
-    status_code=status.HTTP_200_OK,
-    summary="Refresh JWT access token using a valid refresh token"
-)
-async def refresh_token(
-    refresh_in: RefreshTokenRequest,
-    db: AsyncSession = Depends(get_db)
-) -> Token:
-    """Exchanges a valid refresh token for a new access token and rotated refresh token."""
-    auth_service = AuthService(db)
-    tokens = await auth_service.refresh_token(refresh_in)
-    return tokens
+auth_scheme = HTTPBearer(auto_error=False)
 
 
 @router.get(
@@ -77,16 +27,27 @@ async def get_me(
     return current_user
 
 
-
-@router.post("/token", response_model=Token)
+@router.post(
+    "/token",
+    summary="Swagger helper to login using Auth0 Access Token"
+)
 async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    password: str = Form(..., description="Paste your Auth0 access token here"),
     db: AsyncSession = Depends(get_db)
 ):
-    auth_service = AuthService(db)
-    login = LoginRequest(
-        email=form_data.username,   # OAuth2 uses "username"
-        password=form_data.password,
-    )
+    """
+    Helper for Swagger UI testing.
+    Since we use Auth0, real login happens on the frontend.
+    For Swagger, use this endpoint: put any dummy username and paste your real Auth0 token in the password field.
+    """
+    if not password:
+        raise MissingAuthorizationHeaderException()
+        
+    auth_service = Auth0AuthService(db)
+    # verify it just to be sure it's valid
+    await auth_service.verify_token(password)
 
-    return await auth_service.authenticate_user(login)
+    return {
+        "access_token": password,
+        "token_type": "bearer"
+    }

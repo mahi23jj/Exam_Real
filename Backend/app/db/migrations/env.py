@@ -9,7 +9,7 @@ from alembic import context
 
 from app.core.config import settings
 # Import all SQLModel models here so Alembic can discover tables
-from app.db.models import User, RefreshToken
+from app.db.models import User
 
 config = context.config
 

@@ -4,30 +4,30 @@ from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models.exam import Exam, Question, Choice
+from app.db.models.exam import Exam, PastExamQuestion, Choice
 from app.db.models.student_answer import StudentAnswer
 from app.repositories.base import BaseRepository
 
 
-class QuestionRepository(BaseRepository[Question]):
+class PastExamQuestionRepository(BaseRepository[PastExamQuestion]):
     def __init__(self, session: AsyncSession):
-        super().__init__(Question, session)
+        super().__init__(PastExamQuestion, session)
 
-    async def get_by_id_with_choices(self, question_id: uuid.UUID) -> Optional[Question]:
+    async def get_by_id_with_choices(self, question_id: uuid.UUID) -> Optional[PastExamQuestion]:
         statement = (
-            select(Question)
-            .options(selectinload(Question.choices))
-            .where(Question.id == question_id)
+            select(PastExamQuestion)
+            .options(selectinload(PastExamQuestion.choices))
+            .where(PastExamQuestion.id == question_id)
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def list_exam_questions(self, exam_id: uuid.UUID) -> List[Question]:
+    async def list_exam_questions(self, exam_id: uuid.UUID) -> List[PastExamQuestion]:
         statement = (
-            select(Question)
-            .options(selectinload(Question.choices))
-            .where(Question.exam_id == exam_id)
-            .order_by(Question.question_number.asc())
+            select(PastExamQuestion)
+            .options(selectinload(PastExamQuestion.choices))
+            .where(PastExamQuestion.exam_id == exam_id)
+            .order_by(PastExamQuestion.question_number.asc())
         )
         result = await self.session.execute(statement)
         return list(result.scalars().all())
@@ -41,7 +41,7 @@ class StudentAnswerRepository(BaseRepository[StudentAnswer]):
         statement = (
             select(StudentAnswer)
             .options(
-                selectinload(StudentAnswer.question).selectinload(Question.choices),
+                selectinload(StudentAnswer.question).selectinload(PastExamQuestion.choices),
                 selectinload(StudentAnswer.selected_choice)
             )
             .where(StudentAnswer.id == answer_id)

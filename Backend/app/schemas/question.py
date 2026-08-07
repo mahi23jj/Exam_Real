@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict, Field
 from app.db.models.student_answer import ConfidenceLevel

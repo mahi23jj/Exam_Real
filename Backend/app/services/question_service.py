@@ -12,10 +12,10 @@ from app.ai.llm.factory import get_llm_provider
 from app.ai.retrieval.hybrid_retriever import HybridRetriever
 from app.ai.retrieval.confidence_evaluator import RetrievalConfidenceEvaluator, ConfidenceLevel
 from app.db.models.document import Document
-from app.db.models.exam import Exam, Question, Choice
+from app.db.models.exam import Exam, PastExamQuestion, Choice
 from app.db.models.student_answer import StudentAnswer, ConfidenceLevel as StudentConfidenceLevel
 from app.db.models.user import User
-from app.repositories.question_repository import QuestionRepository, StudentAnswerRepository
+from app.repositories.question_repository import PastExamQuestionRepository, StudentAnswerRepository
 from app.schemas.question import (
     ChoiceInitialRead,
     QuestionInitialRead,
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class QuestionService:
     def __init__(self, session: AsyncSession):
         self.session = session
-        self.question_repo = QuestionRepository(session)
+        self.question_repo = PastExamQuestionRepository(session)
         self.answer_repo = StudentAnswerRepository(session)
         self.embedding_provider = BGEM3EmbeddingProvider()
         self.hybrid_retriever = HybridRetriever(session)

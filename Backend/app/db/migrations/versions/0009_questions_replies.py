@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision: str = "0009_learning_questions_and_replies"
+revision: str = "0009_questions_replies.py"
 down_revision: Union[str, None] = "0008_social_pins_and_reactions"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -43,7 +43,7 @@ def upgrade() -> None:
         sa.Column('title', sa.String(length=255), nullable=False),
         sa.Column('content', sa.Text(), nullable=False),
         sa.Column('visibility', postgresql.ENUM(name='visibility', create_type=False), nullable=False, server_default='PUBLIC'),
-        sa.Column('status', questionstatus_enum, nullable=False, server_default='OPEN'),
+        sa.Column('status', postgresql.ENUM(name='questionstatus', create_type=False), nullable=False, server_default='OPEN'),
         sa.Column('answers_count', sa.Integer(), nullable=False, server_default='0'),
         sa.Column('views_count', sa.Integer(), nullable=False, server_default='0'),
         sa.Column('likes_count', sa.Integer(), nullable=False, server_default='0'),

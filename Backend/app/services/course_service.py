@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
 from app.db.models.course import Course
-from app.db.models.user import User, UserRole
+from app.db.models.user import User
 from app.db.models.study_history import RecentStudyItem
 from app.repositories.course_repository import CourseRepository
 from app.repositories.study_history_repository import RecentStudyItemRepository
@@ -171,8 +171,8 @@ class CourseService:
     async def update_course(self, course_id: uuid.UUID, course_update: CourseUpdate, current_user: User) -> Course:
         course = await self.get_course_by_id(course_id)
 
-        # Check ownership (only creator or admin can update)
-        if course.created_by_user_id != current_user.id and current_user.role != UserRole.ADMIN:
+        # Check ownership (only creator can update)
+        if course.created_by_user_id != current_user.id:
             raise UnauthorizedCourseAccessException()
 
         update_dict = course_update.model_dump(exclude_unset=True)
@@ -188,7 +188,7 @@ class CourseService:
         course = await self.get_course_by_id(course_id)
 
         # Check ownership
-        if course.created_by_user_id != current_user.id and current_user.role != UserRole.ADMIN:
+        if course.created_by_user_id != current_user.id:
             raise UnauthorizedCourseAccessException()
 
         # Soft delete

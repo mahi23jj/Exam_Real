@@ -19,11 +19,10 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     API_V1_PREFIX: str = "/api/v1"
 
-    # Security & Auth
-    SECRET_KEY: str = Field("default-insecure-secret-key-change-in-production-min-32-chars-long", min_length=32)
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # Auth0 Configuration
+    AUTH0_DOMAIN: str = ""
+    AUTH0_AUDIENCE: str = ""
+    AUTH0_ALGORITHMS: list[str] = ["RS256"]
 
     # Database Configuration (PostgreSQL + pgvector)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/studyloop_db"

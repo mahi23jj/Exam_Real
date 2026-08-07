@@ -1,4 +1,4 @@
-from app.db.models.user import User, UserRole, RefreshToken
+from app.db.models.user import User
 from app.db.models.course import Course
 from app.db.models.document import Document, FileType, DocumentType, JobStatus
 from app.db.models.job import DocumentProcessingJob
@@ -36,8 +36,6 @@ from app.db.models.study_history import RecentStudyItem, StudyItemType
 
 __all__ = [
     "User",
-    "UserRole",
-    "RefreshToken",
     "Course",
     "Document",
     "FileType",

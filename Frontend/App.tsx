@@ -11,6 +11,7 @@ import Feed from './src/pages/Feed';
 import NotFound from './src/pages/NotFound';
 import Community from './src/pages/Community';
 import Profile from './src/pages/Profile';
+import Auth from './src/pages/Auth';
 
 const App: React.FC = () => {
   return (
@@ -25,6 +26,7 @@ const App: React.FC = () => {
             <Route path="/community" element={<Community />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/course/:courseId" element={<CourseWorkspace />} />
+            <Route path="/auth" element={<Auth />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <ToastContainer

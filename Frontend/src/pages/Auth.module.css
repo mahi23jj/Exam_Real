@@ -1,0 +1,1817 @@
+/* ============================================
+   TOKENS + PAGE
+============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+
+
+.pageContainer {
+
+  --ink: #1C1917;
+  --muted: #57534E;
+  --line: #E7E5E4;
+
+  --teal: #0F766E;
+  --teal-deep: #0B4F49;
+
+  --clay: #C2694A;
+
+  --success: #10B981;
+  --error: #EF4444;
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+
+  position: relative;
+
+  min-height: 100vh;
+  width:100%;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  overflow:hidden;
+
+  padding:24px;
+
+  box-sizing:border-box;
+
+  font-family:var(--font-body);
+
+  transition:
+    background 800ms cubic-bezier(.4,0,.2,1);
+
+}
+
+
+
+/* ============================================
+   BACKGROUND STATES
+============================================ */
+
+
+.bgLogin {
+
+  background:
+    radial-gradient(
+      circle at 15% 20%,
+      rgba(15,118,110,.12),
+      transparent 45%
+    ),
+
+    radial-gradient(
+      circle at 85% 80%,
+      rgba(194,105,74,.08),
+      transparent 50%
+    ),
+
+    linear-gradient(
+      145deg,
+      #F8F5EF 0%,
+      #EAF3F0 100%
+    );
+
+}
+
+
+
+.bgSignUp {
+
+
+  background:
+
+    radial-gradient(
+      circle at 85% 15%,
+      rgba(194,105,74,.12),
+      transparent 45%
+    ),
+
+
+    radial-gradient(
+      circle at 15% 85%,
+      rgba(15,118,110,.12),
+      transparent 50%
+    ),
+
+
+    linear-gradient(
+      145deg,
+      #EAF3F0 0%,
+      #F8F5EF 100%
+    );
+
+}
+
+
+
+/* ============================================
+   AMBIENT GLOW
+============================================ */
+
+
+.ambient {
+
+  position:absolute;
+
+  inset:0;
+
+  overflow:hidden;
+
+  pointer-events:none;
+
+  z-index:0;
+
+}
+
+
+
+.blob {
+
+  position:absolute;
+
+  border-radius:50%;
+
+  filter:blur(100px);
+
+  opacity:.55;
+
+  will-change:transform;
+
+  transition:
+    background .9s ease;
+
+}
+
+
+
+/* top left */
+
+
+.blobOne {
+
+
+  width:460px;
+  height:460px;
+
+
+  top:-15%;
+  left:-12%;
+
+
+  background:
+
+    radial-gradient(
+      circle,
+      rgba(15,118,110,.38),
+      transparent 70%
+    );
+
+
+  animation:
+    driftOne 24s ease-in-out infinite;
+
+}
+
+
+
+/* bottom right */
+
+
+.blobTwo {
+
+
+  width:420px;
+  height:420px;
+
+
+  right:-10%;
+  bottom:-15%;
+
+
+  background:
+
+    radial-gradient(
+      circle,
+      rgba(194,105,74,.34),
+      transparent 70%
+    );
+
+
+  animation:
+    driftTwo 28s ease-in-out infinite;
+
+}
+
+
+
+.bgSignUp .blobOne {
+
+
+  background:
+
+    radial-gradient(
+      circle,
+      rgba(194,105,74,.36),
+      transparent 70%
+    );
+
+}
+
+
+
+.bgSignUp .blobTwo {
+
+
+  background:
+
+    radial-gradient(
+      circle,
+      rgba(15,118,110,.36),
+      transparent 70%
+    );
+
+}
+
+
+
+
+@keyframes driftOne {
+
+
+  0%,100% {
+
+    transform:
+      translate(0,0)
+      scale(1);
+
+  }
+
+
+  50% {
+
+    transform:
+
+      translate(45px,35px)
+      scale(1.1);
+
+  }
+
+}
+
+
+
+@keyframes driftTwo {
+
+
+  0%,100% {
+
+    transform:
+      translate(0,0)
+      scale(1);
+
+  }
+
+
+  50% {
+
+    transform:
+
+      translate(-35px,-30px)
+      scale(1.08);
+
+  }
+
+}
+
+
+
+
+/* ============================================
+   CARD CONTAINER
+============================================ */
+
+
+.cardContainer {
+
+
+  position:relative;
+
+  z-index:10;
+
+
+  width:100%;
+
+  max-width:440px;
+
+
+  perspective:1400px;
+
+
+  animation:
+
+    slideUpFade
+    .65s
+    cubic-bezier(.16,1,.3,1)
+    forwards;
+
+}
+
+
+
+
+.heightWrapper {
+
+
+  position:relative;
+
+
+  transition:
+
+    height
+    .65s
+    cubic-bezier(.65,0,.35,1);
+
+}
+
+
+
+
+/* ============================================
+   3D CARD
+============================================ */
+
+
+.cardInner {
+
+
+  position:relative;
+
+
+  width:100%;
+
+  height:100%;
+
+
+  transform-style:preserve-3d;
+
+
+  transform-origin:center;
+
+
+  transition:
+
+
+    transform
+    .75s
+    cubic-bezier(.65,0,.35,1);
+
+}
+
+
+
+
+.cardInner.flipped {
+
+
+  transform:
+
+    rotateY(180deg)
+    scale(.985);
+
+
+}
+
+
+
+
+/* ============================================
+   CARD FACES
+============================================ */
+
+
+.cardFront,
+.cardBack {
+
+
+  position:absolute;
+
+
+  inset:0;
+
+
+  width:100%;
+
+  height:100%;
+
+
+  box-sizing:border-box;
+
+
+  padding:0;
+
+
+  border-radius:28px;
+
+
+
+  background:
+
+    linear-gradient(
+
+      145deg,
+
+      rgba(255,255,255,.62),
+
+      rgba(255,255,255,.35)
+
+    );
+
+
+
+  -webkit-backdrop-filter:
+
+    blur(32px)
+    saturate(170%);
+
+
+
+  backdrop-filter:
+
+    blur(32px)
+    saturate(170%);
+
+
+
+  border:
+
+    1px solid
+
+    rgba(255,255,255,.55);
+
+
+
+  box-shadow:
+
+
+    0 35px 90px -35px
+
+    rgba(15,40,35,.28),
+
+
+    0 10px 30px -15px
+
+    rgba(15,40,35,.15),
+
+
+    inset 0 1px 0
+
+    rgba(255,255,255,.85);
+
+
+
+  -webkit-backface-visibility:hidden;
+
+  backface-visibility:hidden;
+
+
+}
+
+
+
+
+
+.cardFront {
+
+
+  transform:
+
+    rotateY(0deg);
+
+
+  z-index:2;
+
+}
+
+
+
+
+
+.cardBack {
+
+
+  transform:
+
+    rotateY(180deg);
+
+
+  z-index:1;
+
+
+}
+
+
+
+/* remove scrolling feeling */
+
+.cardFront,
+.cardBack {
+
+  overflow:visible;
+
+}
+
+
+.cardContent {
+
+  width:100%;
+
+  box-sizing:border-box;
+
+  padding:44px 38px 100px;
+
+}
+
+/* ============================================
+   HEADER
+============================================ */
+
+
+.header {
+
+  text-align:center;
+
+  margin-bottom:30px;
+
+}
+
+
+
+.logoWrapper {
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:center;
+
+  gap:10px;
+
+  margin-bottom:8px;
+
+}
+
+
+
+.logoIcon {
+
+  font-size:26px;
+
+  line-height:1;
+
+}
+
+
+
+.logoText {
+
+  margin:0;
+
+
+  font-family:var(--font-display);
+
+
+  font-size:27px;
+
+  font-weight:600;
+
+
+  letter-spacing:-.4px;
+
+
+  color:var(--teal-deep);
+
+}
+
+
+
+.slogan {
+
+
+  margin:0;
+
+
+  font-family:var(--font-display);
+
+  font-style:italic;
+
+
+  font-size:14px;
+
+  font-weight:500;
+
+
+  color:var(--muted);
+
+}
+
+
+
+/* ============================================
+   GOOGLE BUTTON
+============================================ */
+
+
+.googleBtn {
+
+
+  width:100%;
+
+  height:48px;
+
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:center;
+
+
+  gap:12px;
+
+
+  border-radius:12px;
+
+
+  border:
+
+    1px solid
+
+    rgba(231,229,228,.9);
+
+
+
+  background:
+
+    rgba(255,255,255,.55);
+
+
+
+  color:var(--ink);
+
+
+  font-size:15px;
+
+  font-weight:500;
+
+
+  font-family:inherit;
+
+
+  cursor:pointer;
+
+
+  transition:
+
+    transform .2s ease,
+
+    background .2s ease,
+
+    box-shadow .2s ease;
+
+}
+
+
+
+.googleBtn:hover {
+
+
+  background:
+
+    rgba(255,255,255,.85);
+
+
+  transform:
+
+    translateY(-1px);
+
+
+  box-shadow:
+
+    0 8px 20px
+
+    rgba(0,0,0,.08);
+
+}
+
+
+
+.googleBtn:active {
+
+
+  transform:
+
+    scale(.97);
+
+}
+
+
+
+.googleIcon {
+
+
+  width:20px;
+
+  height:20px;
+
+}
+
+
+
+/* ============================================
+   DIVIDER
+============================================ */
+
+
+.divider {
+
+
+  display:flex;
+
+  align-items:center;
+
+
+  margin:
+
+    22px 0 24px;
+
+
+  color:var(--muted);
+
+
+  font-size:11px;
+
+  font-weight:600;
+
+
+  letter-spacing:.7px;
+
+
+  text-transform:uppercase;
+
+}
+
+
+
+.divider::before,
+.divider::after {
+
+
+  content:"";
+
+  flex:1;
+
+
+  height:1px;
+
+
+  background:
+
+    rgba(231,229,228,.9);
+
+}
+
+
+
+.divider::before {
+
+  margin-right:16px;
+
+}
+
+
+
+.divider::after {
+
+  margin-left:16px;
+
+}
+
+
+
+
+/* ============================================
+   FORM
+============================================ */
+
+
+.formGroup {
+
+
+  position:relative;
+
+
+  margin-bottom:18px;
+
+
+  text-align:left;
+
+}
+
+
+
+
+.label {
+
+
+  display:block;
+
+
+  margin-bottom:7px;
+
+
+  color:var(--muted);
+
+
+  font-size:13px;
+
+
+  font-weight:600;
+
+
+}
+
+
+
+.inputWrapper {
+
+
+  position:relative;
+
+
+  display:flex;
+
+
+  align-items:center;
+
+}
+
+
+
+
+.input {
+
+
+  width:100%;
+
+
+  height:48px;
+
+
+  padding:
+
+    0 44px 0 16px;
+
+
+
+  border-radius:12px;
+
+
+  border:
+
+    1.5px solid
+
+    var(--line);
+
+
+
+  background:
+
+    rgba(255,255,255,.52);
+
+
+
+  color:var(--ink);
+
+
+  outline:none;
+
+
+  font-family:inherit;
+
+
+  font-size:15px;
+
+
+  transition:
+
+    border-color .25s ease,
+
+    box-shadow .25s ease,
+
+    background .25s ease;
+
+}
+
+
+
+.input::placeholder {
+
+
+  color:#A8A29E;
+
+}
+
+
+
+.input:focus {
+
+
+  border-color:
+
+    var(--teal);
+
+
+
+  background:
+
+    rgba(255,255,255,.85);
+
+
+
+  box-shadow:
+
+
+    0 0 0 4px
+
+    rgba(15,118,110,.10);
+
+}
+
+
+
+.input.valid {
+
+
+  border-color:
+
+    var(--success);
+
+}
+
+
+
+.input.invalid {
+
+
+  border-color:
+
+    var(--error);
+
+}
+
+
+
+
+
+.inputIconRight {
+
+
+  position:absolute;
+
+
+  right:14px;
+
+
+  display:flex;
+
+
+  align-items:center;
+
+
+  justify-content:center;
+
+
+  border:none;
+
+
+  background:none;
+
+
+  padding:0;
+
+
+  cursor:pointer;
+
+
+  color:#A8A29E;
+
+
+}
+
+
+
+.inputIconRight:hover {
+
+
+  color:var(--muted);
+
+}
+
+
+
+.iconSuccess {
+
+
+  color:var(--success);
+
+}
+
+
+
+.iconError {
+
+
+  color:var(--error);
+
+}
+
+
+
+
+
+/* ============================================
+   PASSWORD REQUIREMENTS
+============================================ */
+
+
+.pwRequirements {
+
+
+  margin-top:10px;
+
+
+  padding:14px 16px;
+
+
+  border-radius:12px;
+
+
+  border:
+
+    1px solid
+
+    rgba(231,229,228,.8);
+
+
+
+  background:
+
+    rgba(255,255,255,.55);
+
+
+
+  backdrop-filter:
+
+    blur(8px);
+
+
+
+  animation:
+
+    revealDown
+    .3s
+    cubic-bezier(.16,1,.3,1);
+
+}
+
+
+
+
+.pwReqTitle {
+
+
+  margin:0 0 8px;
+
+
+  color:var(--muted);
+
+
+  font-size:13px;
+
+  font-weight:600;
+
+}
+
+
+
+
+.pwReqList {
+
+
+  list-style:none;
+
+  padding:0;
+
+  margin:0;
+
+}
+
+
+
+.pwReqItem {
+
+
+  display:flex;
+
+  align-items:center;
+
+
+  gap:8px;
+
+
+  margin-bottom:5px;
+
+
+  color:#A8A29E;
+
+
+  font-size:13px;
+
+
+  transition:
+
+    color .3s ease;
+
+}
+
+
+
+.pwReqItem.met {
+
+
+  color:
+
+    var(--success);
+
+}
+
+
+
+
+/* ============================================
+   LINKS
+============================================ */
+
+
+.forgotLink {
+
+
+  display:block;
+
+
+  margin-top:5px;
+
+
+  margin-left:auto;
+
+
+  border:none;
+
+
+  background:none;
+
+
+  cursor:pointer;
+
+
+  color:var(--muted);
+
+
+  font-size:13px;
+
+
+  font-family:inherit;
+
+
+}
+
+
+
+.forgotLink:hover {
+
+
+  color:var(--teal);
+
+
+  text-decoration:underline;
+
+}
+
+
+
+
+
+.toggleText {
+
+
+  margin-top:24px;
+
+
+  text-align:center;
+
+
+  color:var(--muted);
+
+
+  font-size:14px;
+
+}
+
+
+
+.toggleLink {
+
+
+  border:none;
+
+
+  background:none;
+
+
+  padding:0;
+
+
+  cursor:pointer;
+
+
+  color:var(--teal);
+
+
+  font-weight:600;
+
+
+  font-size:14px;
+
+
+  font-family:inherit;
+
+}
+
+
+
+.toggleLink:hover {
+
+
+  text-decoration:underline;
+
+}
+
+
+
+
+
+/* ============================================
+   MAIN BUTTON
+============================================ */
+
+
+.submitBtn {
+
+
+  width:100%;
+
+
+  height:48px;
+
+
+  margin-top:8px;
+
+
+  border:none;
+
+
+  border-radius:12px;
+
+
+  background:
+
+    var(--teal);
+
+
+
+  color:white;
+
+
+  font-size:16px;
+
+
+  font-weight:600;
+
+
+  font-family:inherit;
+
+
+  cursor:pointer;
+
+
+  display:flex;
+
+
+  justify-content:center;
+
+
+  align-items:center;
+
+
+  gap:8px;
+
+
+  transition:
+
+
+    transform .2s ease,
+
+    box-shadow .2s ease,
+
+    background .2s ease;
+
+}
+
+
+
+
+.submitBtn:hover:not(:disabled) {
+
+
+  background:#0D6B64;
+
+
+  transform:
+
+    translateY(-1px);
+
+
+
+  box-shadow:
+
+
+    0 12px 25px
+
+    rgba(15,118,110,.28);
+
+}
+
+
+
+
+.submitBtn:active:not(:disabled) {
+
+
+  transform:
+
+    scale(.97);
+
+}
+
+
+
+
+.submitBtn:disabled {
+
+
+  background:#C4C0BA;
+
+  cursor:not-allowed;
+
+}
+
+
+
+
+
+.submitBtn.success {
+
+
+  background:
+
+    var(--success);
+
+}
+
+
+
+
+
+.spinner {
+
+
+  width:20px;
+
+  height:20px;
+
+
+  border-radius:50%;
+
+
+  border:
+
+    2px solid
+
+    rgba(255,255,255,.35);
+
+
+
+  border-top-color:white;
+
+
+  animation:
+
+    spin .8s linear infinite;
+
+}
+
+
+
+
+
+/* ============================================
+   VALIDATION
+============================================ */
+
+
+.errorMsg,
+.formError {
+
+
+  color:var(--error);
+
+
+  font-size:13px;
+
+
+  margin-top:6px;
+
+
+  animation:
+
+    revealDown
+
+    .25s
+
+    cubic-bezier(.16,1,.3,1);
+
+}
+
+
+
+.formError {
+
+
+  text-align:center;
+
+
+  margin-bottom:12px;
+
+}
+
+
+
+
+
+/* ============================================
+   CHECKBOX
+============================================ */
+
+
+.checkboxGroup {
+
+
+  display:flex;
+
+
+  align-items:flex-start;
+
+
+  gap:12px;
+
+
+  margin-bottom:20px;
+
+
+}
+
+
+
+.checkbox {
+
+
+  width:18px;
+
+  height:18px;
+
+
+  accent-color:
+
+    var(--teal);
+
+
+}
+
+
+
+.checkboxLabel {
+
+
+  color:var(--muted);
+
+
+  font-size:13px;
+
+
+  line-height:1.5;
+
+}
+
+
+
+
+
+/* ============================================
+   ANIMATIONS
+============================================ */
+
+
+@keyframes revealDown {
+
+
+  from {
+
+
+    opacity:0;
+
+
+    transform:
+
+      translateY(-8px);
+
+
+  }
+
+
+  to {
+
+
+    opacity:1;
+
+
+    transform:
+
+      translateY(0);
+
+
+  }
+
+}
+
+
+
+
+@keyframes slideUpFade {
+
+
+  from {
+
+
+    opacity:0;
+
+
+    transform:
+
+      translateY(24px)
+
+      scale(.96);
+
+
+  }
+
+
+  to {
+
+
+    opacity:1;
+
+
+    transform:
+
+      translateY(0)
+
+      scale(1);
+
+
+  }
+
+}
+
+
+
+
+@keyframes spin {
+
+
+  to {
+
+
+    transform:
+
+      rotate(360deg);
+
+
+  }
+
+}
+
+
+
+
+/* ============================================
+   RESPONSIVE
+============================================ */
+
+
+@media(max-width:767px){
+
+
+.pageContainer {
+
+
+  padding:16px;
+
+
+  align-items:flex-start;
+
+
+  padding-top:40px;
+
+}
+
+
+
+.cardContainer {
+
+
+  max-width:100%;
+
+}
+
+
+
+.cardFront,
+.cardBack {
+
+
+  border-radius:22px;
+
+}
+
+
+.cardContent {
+
+  padding:30px 22px 48px;
+
+}
+
+
+
+.logoText {
+
+
+  font-size:23px;
+
+}
+
+
+
+.input {
+
+
+  height:45px;
+
+}
+
+
+
+.submitBtn,
+.googleBtn {
+
+
+  height:45px;
+
+}
+
+
+
+.blob {
+
+
+  filter:
+
+    blur(70px);
+
+
+  opacity:.4;
+
+}
+
+
+}
+
+
+
+@media(max-width:380px){
+
+
+.cardContent {
+
+  padding:22px 16px 40px;
+
+}
+
+
+
+.logoText {
+
+
+  font-size:21px;
+
+}
+
+
+
+.googleBtn {
+
+
+  font-size:13px;
+
+}
+
+
+
+}
+
+
+
+
+/* ============================================
+   ACCESSIBILITY
+============================================ */
+
+
+.googleBtn:focus-visible,
+.submitBtn:focus-visible,
+.toggleLink:focus-visible,
+.forgotLink:focus-visible,
+.input:focus-visible {
+
+
+  outline:
+
+    2px solid
+
+    var(--teal);
+
+
+  outline-offset:
+
+    3px;
+
+}
+
+
+
+
+@media(prefers-reduced-motion:reduce){
+
+
+* {
+
+
+  animation-duration:
+
+    .01ms !important;
+
+
+  animation-iteration-count:
+
+    1 !important;
+
+
+  transition-duration:
+
+    .01ms !important;
+
+}
+
+
+}

@@ -12,31 +12,34 @@ import NotFound from './src/pages/NotFound';
 import Community from './src/pages/Community';
 import Profile from './src/pages/Profile';
 import Auth from './src/pages/Auth';
+import { AuthProvider } from './src/context/AuthContext';
 
 const App: React.FC = () => {
   return (
     <Theme appearance="inherit" radius="large" scaling="100%">
       <Router>
-        <main className="min-h-screen font-inter">
-          <Routes>
-            {/* Set Courses as the default landing page for the preview */}
-            <Route path="/" element={<Courses />} />
-            <Route path="/courses" element={<Navigate to="/" replace />} />
-            <Route path="/feed" element={<Feed />} />
-            <Route path="/community" element={<Community />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/course/:courseId" element={<CourseWorkspace />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-          <ToastContainer
-            position="top-right"
-            autoClose={3000}
-            newestOnTop
-            closeOnClick
-            pauseOnHover
-          />
-        </main>
+        <AuthProvider>
+          <main className="min-h-screen font-inter">
+            <Routes>
+              {/* Set Courses as the default landing page for the preview */}
+              <Route path="/" element={<Courses />} />
+              <Route path="/courses" element={<Navigate to="/" replace />} />
+              <Route path="/feed" element={<Feed />} />
+              <Route path="/community" element={<Community />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/course/:courseId" element={<CourseWorkspace />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+            <ToastContainer
+              position="top-right"
+              autoClose={3000}
+              newestOnTop
+              closeOnClick
+              pauseOnHover
+            />
+          </main>
+        </AuthProvider>
       </Router>
     </Theme>
   );

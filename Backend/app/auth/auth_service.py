@@ -1,5 +1,6 @@
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError, ExpiredSignatureError
 
@@ -15,6 +16,52 @@ class Auth0AuthService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.user_repo = UserRepository(session)
+        self.connection = "Username-Password-Authentication"
+
+    async def register_user_in_auth0(self, email: str, password: str, full_name: Optional[str] = None) -> Dict[str, Any]:
+        """Creates a user in Auth0 using the dbconnections/signup endpoint."""
+        url = f"https://{auth0_settings.domain}/dbconnections/signup"
+        payload = {
+            "client_id": auth0_settings.client_id,
+            "email": email,
+            "password": password,
+            "connection": self.connection
+        }
+        if full_name:
+            payload["name"] = full_name
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload)
+            if response.status_code != 200:
+                raise Exception(f"Auth0 registration failed: {response.text}")
+            return response.json()
+
+    async def login_user_in_auth0(self, email: str, password: str) -> Dict[str, Any]:
+        """Authenticates a user in Auth0 using Password Realm flow."""
+
+        url = f"https://{auth0_settings.domain}/oauth/token"
+
+        payload = {
+            "grant_type": "http://auth0.com/oauth/grant-type/password-realm",
+            "client_id": auth0_settings.client_id,
+            "client_secret": auth0_settings.client_secret,
+            "username": email,
+            "password": password,
+            "realm": "Username-Password-Authentication",
+            "audience": auth0_settings.audience,
+            "scope": "openid profile email"
+                }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, data=payload)
+
+            print(response.status_code)
+            print(response.text)
+
+            if response.status_code != 200:
+                raise Exception(f"Auth0 login failed: {response.text}")
+
+            return response.json()
 
     async def verify_token(self, token: str) -> Dict[str, Any]:
         """Verifies JWT using Auth0 JWKS."""

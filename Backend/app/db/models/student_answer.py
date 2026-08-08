@@ -31,5 +31,5 @@ class StudentAnswer(TimestampMixin, table=True):
 
     # Relationships
     student: Optional["User"] = Relationship()
-    question: Optional["PastExamQuestion"] = Relationship()
+    question: Optional["PastExamQuestion"] = Relationship(back_populates="student_answers")
     selected_choice: Optional["Choice"] = Relationship()

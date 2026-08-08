@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
-from app.model.enums import UserRole
+
 
 
 PASSWORD_PATTERN = re.compile(
@@ -29,7 +29,6 @@ class LoginRequest(BaseModel):
 
 class InviteCreateRequest(BaseModel):
     email: EmailStr
-    role: UserRole = Field(default=UserRole.OPERATOR)
 
 
 class InviteCreateResponse(BaseModel):
@@ -77,7 +76,6 @@ class SetupPasswordResponse(BaseModel):
     id: UUID
     name: str
     email: EmailStr
-    role: UserRole
 
     class Config:
         from_attributes = True
@@ -97,7 +95,6 @@ class MeResponse(BaseModel):
     id: UUID
     name: str
     email: EmailStr
-    role: UserRole
     profile_picture: Optional[str] = None
     created_at: datetime
     last_login: Optional[datetime] = None

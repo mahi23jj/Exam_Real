@@ -1,13 +1,12 @@
 from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel
-from app.model.enums import UserRole
+
 
 class UserLoginResponse(BaseModel):
     id: UUID
     name: str
     email: str
-    role: UserRole
 
 class Token(BaseModel):
     access_token: str

@@ -5,14 +5,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
 
-from app.model.enums import UserRole
+
 
 
 class UserRead(BaseModel):
     id: UUID
     name: str
     email: EmailStr
-    role: UserRole
 
     class Config:
         from_attributes = True

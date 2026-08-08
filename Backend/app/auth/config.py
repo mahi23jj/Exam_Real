@@ -15,6 +15,14 @@ class Auth0Settings:
         return settings.AUTH0_DOMAIN
 
     @property
+    def client_id(self) -> str:
+        return settings.AUTH0_CLIENT_ID
+
+    @property
+    def client_secret(self) -> str:
+        return settings.AUTH0_CLIENT_SECRET
+
+    @property
     def audience(self) -> str:
         return settings.AUTH0_AUDIENCE
 

@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel, Field, Relationship
 
-from app.model.enums import UserRole
+
 
 if TYPE_CHECKING:
     from app.model.bulk_import import BulkImport

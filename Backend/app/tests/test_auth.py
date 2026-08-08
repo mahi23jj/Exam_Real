@@ -10,8 +10,8 @@ async def test_register_user_success(client: AsyncClient):
         json={
             "email": "teststudent@example.com",
             "password": "SecurePassword123!",
-            "full_name": "Test Student",
-            "role": "STUDENT"
+            "full_name": "Test Student"
+         
         }
     )
     assert response.status_code == 201
@@ -45,8 +45,7 @@ async def test_login_success_and_me_endpoint(client: AsyncClient):
     reg_payload = {
         "email": "logintest@example.com",
         "password": "SecretPassword123!",
-        "full_name": "Login User",
-        "role": "STUDENT"
+        "full_name": "Login User"
     }
     await client.post(f"{settings.API_V1_PREFIX}/auth/register", json=reg_payload)
 

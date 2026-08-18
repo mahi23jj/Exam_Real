@@ -166,7 +166,7 @@ useEffect(()=>{
     setLoading(true);
     try {
       await signUp(email, fullName, password);
-      // AuthContext navigates to '/' on success
+      // AuthContext navigates to '/courses' on success
       setSuccess(true);
     } catch (err) {
       const parsed = parseAuthError(err);

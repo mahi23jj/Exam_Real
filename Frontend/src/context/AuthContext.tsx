@@ -34,6 +34,8 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const POST_AUTH_ROUTE = '/courses';
+
 // ── Provider ──────────────────────────────────────────────────────────────────
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
@@ -62,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(backendUser);
     setAccessToken(token);
     localStorage.setItem('examreal_access_token', token);
-    navigate('/');
+    navigate(POST_AUTH_ROUTE, { replace: true });
   }, [navigate]);
 
   const signUp = useCallback(async (email: string, fullName: string, password: string) => {
@@ -70,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(backendUser);
     setAccessToken(token);
     localStorage.setItem('examreal_access_token', token);
-    navigate('/');
+    navigate(POST_AUTH_ROUTE, { replace: true });
   }, [navigate]);
 
   const loginWithGoogle = useCallback(async () => {
@@ -78,12 +80,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(backendUser);
     setAccessToken(token);
     localStorage.setItem('examreal_access_token', token);
-    navigate('/');
+    navigate(POST_AUTH_ROUTE, { replace: true });
   }, [navigate]);
 
   const logout = useCallback(async () => {
     setUser(null);
     setAccessToken(null);
+    localStorage.removeItem('examreal_access_token');
     await auth0Logout();
   }, []);
 

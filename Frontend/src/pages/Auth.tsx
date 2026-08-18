@@ -1,9 +1,13 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import LoginCard from '../components/auth/LoginCard';
 import SignUpCard from '../components/auth/SignUpCard';
+import { useAuth } from '../context/AuthContext';
 import styles from './Auth.module.css';
 
 const Auth: React.FC = () => {
+
+  const { user, isLoading } = useAuth();
 
   const [isFlipped, setIsFlipped] = useState(false);
 
@@ -135,6 +139,11 @@ const Auth: React.FC = () => {
 
 
 
+
+
+  if (!isLoading && user) {
+    return <Navigate to="/courses" replace />;
+  }
 
 
   return (

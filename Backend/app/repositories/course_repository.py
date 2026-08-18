@@ -211,6 +211,7 @@ class CourseRepository(BaseRepository[Course]):
                 "is_following": is_following,
                 "latest_update": None,
                 "open_url": f"/courses/{c.code.lower()}",
+                "is_active": c.is_active,
                 "created_at": c.created_at
             })
 

@@ -118,6 +118,7 @@ class MyCourseCardRead(BaseModel):
     visibility: Visibility
     creator_role: str
     stats: CourseCardStats
+    is_active: bool = True
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

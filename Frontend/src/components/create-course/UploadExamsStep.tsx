@@ -43,7 +43,7 @@ const UploadExamsStep: React.FC<UploadExamsStepProps> = ({
 
       <FileUploadZone
         onFilesSelected={onFilesSelected}
-        accept=".pdf,.docx,.txt"
+        accept=".pdf,.ppt,.pptx,.png,.jpg,.jpeg,.webp"
         disabled={disableActions}
       />
 

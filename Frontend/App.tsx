@@ -6,6 +6,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 import Courses from './src/pages/Courses';
+import CourseDetail from './src/pages/CourseDetail';
 import CourseWorkspace from './src/pages/CourseWorkspace';
 import Feed from './src/pages/Feed';
 import NotFound from './src/pages/NotFound';
@@ -27,7 +28,8 @@ const App: React.FC = () => {
               <Route path="/feed" element={<Feed />} />
               <Route path="/community" element={<Community />} />
               <Route path="/profile" element={<Profile />} />
-              <Route path="/course/:courseId" element={<CourseWorkspace />} />
+              <Route path="/course/:courseId" element={<CourseDetail />} />
+              <Route path="/workspace/:courseId" element={<CourseWorkspace />} />
               <Route path="/auth" element={<Navigate to="/" replace />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

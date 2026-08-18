@@ -8,9 +8,9 @@ type ContinueColor = 'teal' | 'amber' | 'rose';
 interface ContinueCardProps {
   type: ContinueItemType;
   title: string;
-  subtitle: string;
+  subtitle?: string | null;
   meta: string;
-  progress: number; // 0 to 100
+  progress?: number | null; // 0 to 100, omitted when unknown
   onClick?: () => void;
 }
 
@@ -49,6 +49,7 @@ const ContinueCard: React.FC<ContinueCardProps> = ({
           </div>
           
           {/* Progress Ring */}
+          {progress != null && (
           <div className="relative w-8 h-8">
             <svg className="w-full h-full -rotate-90">
               <circle
@@ -69,10 +70,11 @@ const ContinueCard: React.FC<ContinueCardProps> = ({
               {progress}%
             </span>
           </div>
+          )}
         </div>
 
         <h3 className="text-sm font-bold text-stone-800 mb-1 truncate">{title}</h3>
-        <p className="text-xs text-stone-500 mb-4 truncate">{subtitle}</p>
+        <p className="text-xs text-stone-500 mb-4 truncate">{subtitle || '\u00A0'}</p>
 
         {/* Resume Button Overlay */}
         <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl flex items-center justify-center">

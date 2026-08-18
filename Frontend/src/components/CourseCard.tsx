@@ -7,17 +7,24 @@ export type CourseCardVariant = 'explore' | 'following' | 'mine';
 interface CourseCardProps {
   variant: CourseCardVariant;
   title: string;
-  description?: string;
-  creator: string;
-  students?: number;
-  materials?: number;
-  exams?: number;
-  lastUpdated?: string;
-  tag?: string;
-  isFollowing?: boolean;
+  description?: string | null;
+  creator?: string | null;
+  students?: number | null;
+  materials?: number | null;
+  exams?: number | null;
+  lastUpdated?: string | null;
+  tag?: string | null;
+  isFollowing?: boolean | null;
+  isActive?: boolean;
   onFollow?: () => void;
   onOpen?: () => void;
   onManage?: () => void;
+}
+
+const DESCRIPTION_MAX_CHARS = 120;
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max).trimEnd()}...` : text;
 }
 
 const Stat: React.FC<{ icon: React.ElementType; value: number | string }> = ({
@@ -41,18 +48,32 @@ const CourseCard: React.FC<CourseCardProps> = ({
   lastUpdated,
   tag,
   isFollowing,
+  isActive = true,
   onFollow,
   onOpen,
   onManage,
 }) => {
-  const initials = creator.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const creatorName = creator?.trim() || 'Unknown';
+  const initials =
+    creatorName.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 
   return (
-    <motion.div 
-      whileHover={{ y: -6 }}
-      className="group relative bg-white rounded-2xl p-6 premium-shadow hover:premium-shadow-hover transition-all duration-300 flex flex-col h-full"
+    <motion.div
+      whileHover={isActive ? { y: -6 } : undefined}
+      aria-disabled={!isActive}
+      className={`group relative rounded-2xl p-6 premium-shadow transition-all duration-300 flex flex-col h-full ${
+        isActive
+          ? 'bg-white hover:premium-shadow-hover'
+          : 'bg-stone-100 grayscale opacity-70 cursor-not-allowed pointer-events-none select-none'
+      }`}
     >
-      {tag && (
+      {!isActive && (
+        <div className="absolute top-4 right-4 px-2 py-0.5 bg-stone-200 text-stone-500 text-[10px] font-bold rounded-full uppercase tracking-wider">
+          Inactive
+        </div>
+      )}
+
+      {tag && isActive && (
         <div className="absolute top-4 right-4 px-2 py-0.5 bg-teal-50 text-teal-700 text-[10px] font-bold rounded-full uppercase tracking-wider">
           {tag}
         </div>
@@ -68,19 +89,23 @@ const CourseCard: React.FC<CourseCardProps> = ({
             <div className="w-5 h-5 rounded-full bg-stone-100 flex items-center justify-center text-[8px] font-bold text-stone-500 border border-white">
               {initials}
             </div>
-            <span className="text-xs text-stone-500 font-medium">{creator}</span>
+            <span className="text-xs text-stone-500 font-medium">{creatorName}</span>
           </div>
         </div>
       </div>
 
-      {description && (
-        <p className="text-sm text-stone-500 mb-6 line-clamp-2 leading-relaxed">{description}</p>
+      {description ? (
+        <p className="text-sm text-stone-500 mb-6 line-clamp-2 leading-relaxed">
+          {truncate(description, DESCRIPTION_MAX_CHARS)}
+        </p>
+      ) : (
+        <p className="text-sm text-stone-300 italic mb-6">No description</p>
       )}
 
       <div className="flex items-center gap-4 mb-6 mt-auto">
-        {students !== undefined && <Stat icon={Users} value={students} />}
-        {materials !== undefined && <Stat icon={FileText} value={materials} />}
-        {exams !== undefined && <Stat icon={ClipboardList} value={exams} />}
+        {students != null && <Stat icon={Users} value={students} />}
+        {materials != null && <Stat icon={FileText} value={materials} />}
+        {exams != null && <Stat icon={ClipboardList} value={exams} />}
       </div>
 
       <div className="flex items-center justify-between pt-4 border-t border-stone-50">
@@ -103,10 +128,11 @@ const CourseCard: React.FC<CourseCardProps> = ({
         )}
 
         <button
-          onClick={variant === 'mine' ? onManage : onOpen}
-          className="flex items-center gap-1.5 text-xs font-bold text-teal-700 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0"
+          onClick={onOpen ?? onManage}
+          disabled={!isActive}
+          className="flex items-center gap-1.5 text-xs font-bold text-teal-700 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0 disabled:text-stone-400"
         >
-          {variant === 'mine' ? 'Manage' : 'Open'}
+          {onOpen ? 'Open' : 'Manage'}
           <ArrowUpRight className="w-3.5 h-3.5" />
         </button>
       </div>

@@ -39,7 +39,7 @@ const UploadNotesStep: React.FC<UploadNotesStepProps> = ({
 
       <FileUploadZone
         onFilesSelected={onFilesSelected}
-        accept=".pdf,.docx,.txt,.md"
+        accept=".pdf,.ppt,.pptx,.png,.jpg,.jpeg,.webp"
         disabled={isUploading}
       />
 

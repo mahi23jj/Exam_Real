@@ -8,7 +8,6 @@ from app.db.models.study_history import StudyItemType
 
 
 class CourseBase(BaseModel):
-    code: str
     title: str
     description: Optional[str] = None
     category: Optional[str] = None
@@ -16,7 +15,7 @@ class CourseBase(BaseModel):
 
 
 class CourseCreate(CourseBase):
-    pass
+    """Course codes are generated server-side, so clients never send one."""
 
 
 class CourseUpdate(BaseModel):
@@ -30,6 +29,7 @@ class CourseUpdate(BaseModel):
 
 class CourseRead(CourseBase):
     id: uuid.UUID
+    code: str
     created_by_user_id: uuid.UUID
     is_active: bool
     created_at: datetime
@@ -121,7 +121,7 @@ class MyCourseCardRead(BaseModel):
     stats: CourseCardStats
     is_active: bool = True
     created_at: datetime
-    is_active: bool
+
     model_config = ConfigDict(from_attributes=True)
 
 

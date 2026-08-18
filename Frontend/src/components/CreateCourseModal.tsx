@@ -10,17 +10,23 @@ import SuccessStep from './create-course/SuccessStep';
 import ConfirmationDialog from './create-course/ConfirmationDialog';
 import Toast from './ui/Toast';
 import type { FileItem } from './create-course/FileList';
+import { createCourse, type CourseRead } from '../services/courseService';
+import {
+  uploadDocuments,
+  ACCEPTED_UPLOAD_EXTENSIONS,
+  MAX_UPLOAD_FILES,
+} from '../services/documentService';
 
 interface CreateCourseModalProps {
   open: boolean;
   onClose: () => void;
-  onCreate: (data: any) => void;
+  onCreated: (course: CourseRead) => void;
 }
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const MAX_FILES = 20;
+const MAX_FILES = MAX_UPLOAD_FILES;
 
-const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ open, onClose, onCreate }) => {
+const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ open, onClose, onCreated }) => {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -40,17 +46,9 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ open, onClose, on
     setToast({ message, type });
   };
 
-  const simulateUpload = (fileId: string, setFiles: React.Dispatch<React.SetStateAction<FileItem[]>>) => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 20 + 10;
-      if (progress >= 100) {
-        clearInterval(interval);
-        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, progress: 100, status: 'success' } : f));
-      } else {
-        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, progress } : f));
-      }
-    }, 300);
+  /** Files are only staged here; the real upload happens once the course exists. */
+  const markFileReady = (fileId: string, setFiles: React.Dispatch<React.SetStateAction<FileItem[]>>) => {
+    setFiles(prev => prev.map(f => f.id === fileId ? { ...f, progress: 100, status: 'success' } : f));
   };
 
   const handleFilesSelected = (
@@ -60,7 +58,7 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ open, onClose, on
     allowedExtensions: string[]
   ) => {
     if (currentFiles.length + newFiles.length > MAX_FILES) {
-      showToast('Maximum 20 files allowed', 'error');
+      showToast(`Maximum ${MAX_FILES} files allowed`, 'error');
       return;
     }
 
@@ -96,7 +94,7 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ open, onClose, on
       setFiles(prev => [...prev, ...newFileItems]);
       newFileItems.forEach(item => {
         if (item.status === 'uploading') {
-          simulateUpload(item.id, setFiles);
+          markFileReady(item.id, setFiles);
         }
       });
     }
@@ -108,7 +106,7 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ open, onClose, on
 
   const handleRetryFile = (id: string, setFiles: React.Dispatch<React.SetStateAction<FileItem[]>>) => {
     setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'uploading', progress: 0, error: undefined } : f));
-    simulateUpload(id, setFiles);
+    markFileReady(id, setFiles);
   };
 
   const hasUnsavedProgress = useCallback(() => {
@@ -146,27 +144,38 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ open, onClose, on
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    
-    // Simulate final API call
+
     try {
-      await new Promise((resolve, reject) => {
-        setTimeout(() => {
-          // Simulate 10% chance of failure for testing error toast if desired
-          // if (Math.random() < 0.1) reject(new Error('Network error'));
-          resolve(true);
-        }, 1500);
+      const course = await createCourse({
+        title: courseData.name.trim(),
+        description: courseData.description.trim() || null,
+        category: courseData.department.trim() || null,
+        visibility: courseData.visibility === 'private' ? 'PRIVATE' : 'PUBLIC',
       });
-      
-      onCreate({
-        ...courseData,
-        notes: notesFiles.filter(f => f.status === 'success'),
-        exams: examsFiles.filter(f => f.status === 'success')
-      });
-      
-      showToast(`${courseData.name} created successfully!`, 'success');
+
+      const notes = notesFiles.filter(f => f.status === 'success').map(f => f.file);
+      const exams = examsFiles.filter(f => f.status === 'success').map(f => f.file);
+
+      try {
+        if (notes.length) await uploadDocuments(course.id, notes, 'NOTE');
+        if (exams.length) await uploadDocuments(course.id, exams, 'PAST_EXAM');
+      } catch (uploadError) {
+        showToast(
+          uploadError instanceof Error
+            ? `Course created, but upload failed: ${uploadError.message}`
+            : 'Course created, but the upload failed.',
+          'error',
+        );
+      }
+
+      onCreated(course);
+      showToast(`${course.title} created successfully!`, 'success');
       setStep(4);
     } catch (error) {
-      showToast('Failed to create course. Please try again.', 'error');
+      showToast(
+        error instanceof Error ? error.message : 'Failed to create course. Please try again.',
+        'error',
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -248,7 +257,7 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ open, onClose, on
                     <UploadNotesStep
                       key="step2"
                       files={notesFiles}
-                      onFilesSelected={(files) => handleFilesSelected(files, notesFiles, setNotesFiles, ['.pdf', '.docx', '.txt', '.md'])}
+                      onFilesSelected={(files) => handleFilesSelected(files, notesFiles, setNotesFiles, ACCEPTED_UPLOAD_EXTENSIONS)}
                       onRemoveFile={(id) => handleRemoveFile(id, setNotesFiles)}
                       onRetryFile={(id) => handleRetryFile(id, setNotesFiles)}
                       onNext={() => setStep(3)}
@@ -259,7 +268,7 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ open, onClose, on
                     <UploadExamsStep
                       key="step3"
                       files={examsFiles}
-                      onFilesSelected={(files) => handleFilesSelected(files, examsFiles, setExamsFiles, ['.pdf', '.docx', '.txt'])}
+                      onFilesSelected={(files) => handleFilesSelected(files, examsFiles, setExamsFiles, ACCEPTED_UPLOAD_EXTENSIONS)}
                       onRemoveFile={(id) => handleRemoveFile(id, setExamsFiles)}
                       onRetryFile={(id) => handleRetryFile(id, setExamsFiles)}
                       onBack={() => setStep(2)}

@@ -3,7 +3,7 @@ from typing import Optional, List
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.document import Document, JobStatus
+from app.db.models.document import Document, DocumentType, JobStatus
 from app.db.models.job import DocumentProcessingJob
 from app.repositories.base import BaseRepository
 
@@ -17,11 +17,22 @@ class DocumentRepository(BaseRepository[Document]):
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def list_by_course(self, course_id: uuid.UUID) -> List[Document]:
+    async def list_by_course(
+        self,
+        course_id: uuid.UUID,
+        statuses: Optional[List[JobStatus]] = None,
+        doc_type: Optional[DocumentType] = None
+    ) -> List[Document]:
         statement = select(Document).where(
             Document.course_id == course_id,
             Document.is_active == True
-        ).order_by(Document.created_at.desc())
+        )
+        if statuses:
+            statement = statement.where(Document.status.in_(statuses))
+        if doc_type:
+            statement = statement.where(Document.doc_type == doc_type)
+
+        statement = statement.order_by(Document.created_at.desc())
         result = await self.session.execute(statement)
         return list(result.scalars().all())
 

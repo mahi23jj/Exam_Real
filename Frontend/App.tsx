@@ -22,13 +22,13 @@ const App: React.FC = () => {
           <main className="min-h-screen font-inter">
             <Routes>
               {/* Set Courses as the default landing page for the preview */}
-              <Route path="/" element={<Courses />} />
-              <Route path="/courses" element={<Navigate to="/" replace />} />
+              <Route path="/" element={<Auth />} />
+              <Route path="/courses" element={<Courses />} />
               <Route path="/feed" element={<Feed />} />
               <Route path="/community" element={<Community />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/course/:courseId" element={<CourseWorkspace />} />
-              <Route path="/auth" element={<Auth />} />
+              <Route path="/auth" element={<Navigate to="/" replace />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <ToastContainer

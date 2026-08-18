@@ -3,6 +3,7 @@ from typing import Optional, List, Tuple, Dict, Any
 from sqlmodel import select, func, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy import case
 
 from app.db.models.course import Course
 from app.db.models.user import User
@@ -28,7 +29,7 @@ class CourseRepository(BaseRepository[Course]):
         statement = (
             select(Course)
             .options(selectinload(Course.created_by))
-            .where(Course.id == id, Course.is_active == True)
+            .where(Course.id == id)
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
@@ -42,40 +43,146 @@ class CourseRepository(BaseRepository[Course]):
         viewer_id: Optional[uuid.UUID] = None
     ) -> Tuple[List[Dict[str, Any]], int]:
         """
-        Lists public active courses enriched with creator details, stats, and follow status.
-        Uses efficient batched queries to eliminate N+1 overhead.
+        Lists public active courses for Explore.
+
+        Rules:
+        - Never show the viewer's own courses.
+        - Never show courses already followed by the viewer.
+        - Prioritize courses whose category matches a course followed by the viewer.
+        - Then show other public courses.
+        - Supports search, category filtering, pagination, and enrichment.
         """
+
+        # ---------------------------------------------------------
+        # Base query
+        # ---------------------------------------------------------
         statement = (
             select(Course)
             .options(selectinload(Course.created_by))
             .join(User, Course.created_by_user_id == User.id)
-            .where(Course.is_active == True, Course.visibility == Visibility.PUBLIC)
+            .where(
+                Course.is_active == True,
+                Course.visibility == Visibility.PUBLIC,
+            )
         )
 
-        if category:
-            statement = statement.where(Course.category.ilike(category.strip()))
+        # ---------------------------------------------------------
+        # Viewer-specific exclusions and related-course ranking
+        # ---------------------------------------------------------
+        related_categories_subquery = None
 
+        if viewer_id:
+
+            # Courses already followed by the viewer
+            followed_courses_subquery = (
+                select(Follow.target_id)
+                .where(
+                    Follow.follower_id == viewer_id,
+                    Follow.target_type == TargetType.COURSE,
+                )
+            )
+
+            # Never show courses the viewer already follows
+            statement = statement.where(
+                ~Course.id.in_(followed_courses_subquery)
+            )
+
+            # Never show courses created by the viewer
+            statement = statement.where(
+                Course.created_by_user_id != viewer_id
+            )
+
+            # Get categories of courses followed by the viewer.
+            #
+            # These categories are used to prioritize related courses.
+            related_categories_subquery = (
+                select(Course.category)
+                .join(
+                    Follow,
+                    and_(
+                        Follow.target_id == Course.id,
+                        Follow.target_type == TargetType.COURSE,
+                    )
+                )
+                .where(
+                    Follow.follower_id == viewer_id,
+                    Course.is_active == True,
+                    Course.visibility == Visibility.PUBLIC,
+                    Course.category.is_not(None),
+                )
+                .distinct()
+            )
+
+            # Related courses first, then other courses.
+            statement = statement.order_by(
+                case(
+                    (
+                        Course.category.in_(related_categories_subquery),
+                        0,
+                    ),
+                    else_=1,
+                ),
+                Course.created_at.desc(),
+            )
+
+        else:
+            # No logged-in viewer:
+            # simply show newest public courses.
+            statement = statement.order_by(
+                Course.created_at.desc()
+            )
+
+        # ---------------------------------------------------------
+        # Category filter
+        # ---------------------------------------------------------
+        if category:
+            statement = statement.where(
+                Course.category.ilike(category.strip())
+            )
+
+        # ---------------------------------------------------------
+        # Search
+        # ---------------------------------------------------------
         if search:
             search_pattern = f"%{search.strip()}%"
+
             statement = statement.where(
                 or_(
                     Course.title.ilike(search_pattern),
                     Course.code.ilike(search_pattern),
                     Course.category.ilike(search_pattern),
-                    User.full_name.ilike(search_pattern)
+                    User.full_name.ilike(search_pattern),
                 )
             )
 
-        # Count total
-        count_stmt = select(func.count()).select_from(statement.subquery())
+        # ---------------------------------------------------------
+        # Count
+        # ---------------------------------------------------------
+        count_stmt = select(
+            func.count()
+        ).select_from(
+            statement.order_by(None).subquery()
+        )
+
         count_result = await self.session.execute(count_stmt)
         total = count_result.scalar_one()
 
-        statement = statement.offset(skip).limit(limit).order_by(Course.created_at.desc())
+        # ---------------------------------------------------------
+        # Pagination
+        # ---------------------------------------------------------
+        statement = statement.offset(skip).limit(limit)
+
         results = await self.session.execute(statement)
         courses = list(results.scalars().all())
 
-        enriched = await self._enrich_course_cards(courses, viewer_id=viewer_id)
+        # ---------------------------------------------------------
+        # Enrich cards
+        # ---------------------------------------------------------
+        enriched = await self._enrich_course_cards(
+            courses,
+            viewer_id=viewer_id,
+        )
+
         return enriched, total
 
     async def list_following_courses(
@@ -113,7 +220,7 @@ class CourseRepository(BaseRepository[Course]):
         statement = (
             select(Course)
             .options(selectinload(Course.created_by))
-            .where(Course.created_by_user_id == creator_id, Course.is_active == True)
+            .where(Course.created_by_user_id == creator_id)
         )
 
         count_stmt = select(func.count()).select_from(statement.subquery())
@@ -188,8 +295,7 @@ class CourseRepository(BaseRepository[Course]):
         for c in courses:
             creator_data = {
                 "id": c.created_by.id if c.created_by else c.created_by_user_id,
-                "full_name": c.created_by.full_name if c.created_by else "Unknown",
-                "role": c.created_by.role if c.created_by else "STUDENT"
+                "full_name": c.created_by.full_name if c.created_by else "Unknown"
             }
             stats_data = {
                 "followers_count": followers_map.get(c.id, 0),
@@ -206,7 +312,6 @@ class CourseRepository(BaseRepository[Course]):
                 "category": c.category,
                 "visibility": c.visibility,
                 "creator": creator_data,
-                "creator_role": creator_data["role"],
                 "stats": stats_data,
                 "is_following": is_following,
                 "latest_update": None,

@@ -59,7 +59,7 @@ class CourseService:
             category=course_in.category.strip() if course_in.category else None,
             visibility=course_in.visibility,
             created_by_user_id=current_user.id,
-            is_active=True
+            is_active=False
         )
         return await self.course_repo.create(course)
 

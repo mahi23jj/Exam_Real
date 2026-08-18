@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from app.db.models.document import Document
     from app.db.models.content_block import ContentBlock
     from app.db.models.course import Course
+    from app.db.models.student_answer import StudentAnswer
 
 
 class AnswerSource(str, enum.Enum):
@@ -95,7 +96,7 @@ class Exam(TimestampMixin, table=True):
 
 
 class PastExamQuestion(TimestampMixin, table=True):
-    __tablename__ = "past_exam_questions"
+    __tablename__ = "questions"
 
     id: uuid.UUID = Field(default_factory=generate_uuid, primary_key=True, index=True)
     exam_id: uuid.UUID = Field(foreign_key="exams.id", index=True, nullable=False)
@@ -120,7 +121,12 @@ class PastExamQuestion(TimestampMixin, table=True):
     # Relationships
     exam: Optional["Exam"] = Relationship(back_populates="questions")
     topic: Optional["Topic"] = Relationship(back_populates="past_exam_questions")
+    student_answers: List["StudentAnswer"] = Relationship(back_populates="question")
     choices: List["Choice"] = Relationship(
+        back_populates="question",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    content_block_links: List["QuestionContentBlockLink"] = Relationship(
         back_populates="question",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
@@ -130,16 +136,19 @@ class QuestionContentBlockLink(TimestampMixin, table=True):
     __tablename__ = "question_content_block_links"
 
     id: uuid.UUID = Field(default_factory=generate_uuid, primary_key=True, index=True)
-    question_id: uuid.UUID = Field(foreign_key="past_exam_questions.id", index=True, nullable=False)
+    question_id: uuid.UUID = Field(foreign_key="questions.id", index=True, nullable=False)
     content_block_id: uuid.UUID = Field(foreign_key="content_blocks.id", index=True, nullable=False)
     similarity_score: float = Field(nullable=False)
+
+    # Relationships
+    question: Optional["PastExamQuestion"] = Relationship(back_populates="content_block_links")
 
 
 class Choice(TimestampMixin, table=True):
     __tablename__ = "choices"
 
     id: uuid.UUID = Field(default_factory=generate_uuid, primary_key=True, index=True)
-    question_id: uuid.UUID = Field(foreign_key="past_exam_questions.id", index=True, nullable=False)
+    question_id: uuid.UUID = Field(foreign_key="questions.id", index=True, nullable=False)
     choice_label: str = Field(nullable=False, max_length=10)  # e.g., 'A', 'B', 'C', 'D'
     choice_text: str = Field(nullable=False)
     is_correct: Optional[bool] = Field(default=None, nullable=True)

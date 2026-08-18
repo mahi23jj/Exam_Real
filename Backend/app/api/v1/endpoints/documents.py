@@ -1,3 +1,4 @@
+from typing import List
 import uuid
 from fastapi import APIRouter, Depends, UploadFile, File, Form, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,24 +15,22 @@ router = APIRouter(tags=["Document Management & AI Pipeline"])
 
 @router.post(
     "/courses/{course_id}/documents",
-    response_model=DocumentUploadResponse,
+    response_model=List[DocumentUploadResponse],
     status_code=status.HTTP_202_ACCEPTED,
     summary="Upload document (PDF/PPT/PPTX/Image) and trigger background AI processing"
 )
 async def upload_document(
     course_id: uuid.UUID,
-    title: str = Form(..., description="Human-readable title of the document"),
     doc_type: DocumentType = Form(..., description="Document type: NOTE or PAST_EXAM"),
-    file: UploadFile = File(..., description="Binary document file (PDF, PPT, PPTX, image)"),
+    files: List[UploadFile] = File(...,  description="Multiple document files"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
-) -> DocumentUploadResponse:
+) -> List[DocumentUploadResponse]:
     """Uploads document to Cloudinary, creates Document record & Processing Job, enqueues background processing, and immediately returns."""
     service = DocumentService(db)
     return await service.upload_document(
         course_id=course_id,
-        file=file,
-        title=title,
+        files=files,
         doc_type=doc_type,
         current_user=current_user
     )

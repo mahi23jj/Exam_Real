@@ -55,8 +55,8 @@ class CourseCardStats(BaseModel):
 
 class CourseCreatorRead(BaseModel):
     id: uuid.UUID
-    full_name: str
-    role: str
+    full_name: str | None = None
+
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -72,6 +72,7 @@ class ExploreCourseCardRead(BaseModel):
     stats: CourseCardStats
     is_following: bool = False
     created_at: datetime
+    is_active: bool
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -96,6 +97,7 @@ class FollowingCourseCardRead(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     creator: CourseCreatorRead
+    is_active: bool
     latest_update: Optional[LatestUpdateRead] = None
     open_url: str
 
@@ -116,10 +118,9 @@ class MyCourseCardRead(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     visibility: Visibility
-    creator_role: str
     stats: CourseCardStats
     created_at: datetime
-
+    is_active: bool
     model_config = ConfigDict(from_attributes=True)
 
 

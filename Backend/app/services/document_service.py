@@ -49,65 +49,133 @@ class DocumentService:
         else:
             raise InvalidFileTypeException(ext)
 
-    async def upload_document(
-        self,
-        course_id: uuid.UUID,
-        file: UploadFile,
-        title: str,
-        doc_type: DocumentType,
-        current_user: User
-    ) -> DocumentUploadResponse:
-        """Uploads document binary to Cloudinary, creates DB metadata, spawns Celery task, and returns immediate response."""
-        # 1. Validate Course exists
+    async def upload_documents(
+            self,
+            course_id: uuid.UUID,
+            files: List[UploadFile],
+            doc_type: DocumentType,
+            current_user: User
+        ) -> List[DocumentUploadResponse]:
+
+        """
+        Upload multiple documents to a course.
+        Creates separate processing jobs for each document.
+        """
+
+        # 1. Validate course
         course = await self.course_repo.get_active_by_id(course_id)
+
         if not course:
-            raise HTTPException(status_code=404, detail="Course not found.")
+            raise HTTPException(
+                status_code=404,
+                detail="Course not found"
+            )
 
-        # 2. Determine file type
-        filename = file.filename or "uploaded_document"
-        file_type = self._determine_file_type(filename)
 
-        # 3. Upload to Cloudinary
-        upload_meta = await self.storage_service.upload_file(file=file, folder=f"studyloop/{course.code}")
+        # 2. Permission check
+        if course.created_by_user_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Only course owner can upload documents"
+            )
 
-        # 4. Create Document record
-        document = Document(
-            course_id=course_id,
-            uploaded_by_user_id=current_user.id,
-            title=title.strip(),
-            file_name=filename,
-            file_type=file_type,
-            doc_type=doc_type,
-            cloudinary_public_id=upload_meta["public_id"],
-            cloudinary_secure_url=upload_meta["secure_url"],
-            file_size_bytes=upload_meta["bytes"],
-            status=JobStatus.PENDING,
-            metadata_json={"format": upload_meta.get("format")},
-            is_active=True
-        )
-        created_doc = await self.doc_repo.create(document)
 
-        # 5. Create AI Processing Job record
-        job = DocumentProcessingJob(
-            document_id=created_doc.id,
-            status=JobStatus.PENDING,
-            current_step="QUEUED_FOR_PROCESSING",
-            error_message=None
-        )
-        created_job = await self.job_repo.create(job)
+        # 3. Upload limit
+        MAX_FILES = 10
 
-        # 6. Dispatch Background Task to Celery
-        try:
-            process_document_task.delay(str(created_doc.id), str(created_job.id))
-        except Exception:
-            # Fallback for local testing without running Redis
-            pass
+        if len(files) > MAX_FILES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Maximum {MAX_FILES} files allowed"
+            )
 
-        return DocumentUploadResponse(
-            message="Document uploaded successfully. Background AI processing initiated.",
-            document=DocumentRead.model_validate(created_doc),
-            job=DocumentProcessingJobRead.model_validate(created_job)
-        )
+
+        uploaded_documents = []
+
+
+        for file in files:
+
+            filename = file.filename or "uploaded_document"
+
+
+            # 4. Validate extension
+            file_type = self._determine_file_type(filename)
+
+
+            # 5. Upload to Cloudinary
+            upload_meta = await self.storage_service.upload_file(
+                file=file,
+                folder=f"studyloop/{course.code}"
+            )
+
+
+            # 6. Save document metadata
+            document = Document(
+                course_id=course_id,
+                uploaded_by_user_id=current_user.id,
+
+                title=filename,
+                file_name=filename,
+
+                file_type=file_type,
+                doc_type=doc_type,
+
+                cloudinary_public_id=upload_meta["public_id"],
+                cloudinary_secure_url=upload_meta["secure_url"],
+
+                file_size_bytes=upload_meta["bytes"],
+
+                status=JobStatus.PENDING,
+
+                metadata_json={
+                    "format": upload_meta["format"]
+                },
+
+                is_active=True
+            )
+
+
+            created_document = await self.doc_repo.create(document)
+
+
+            # 7. Create processing job
+            job = DocumentProcessingJob(
+                document_id=created_document.id,
+                status=JobStatus.PENDING,
+                current_step="QUEUED_FOR_PROCESSING"
+            )
+
+
+            created_job = await self.job_repo.create(job)
+
+
+            # 8. Start AI pipeline
+            try:
+                process_document_task.delay(
+                    str(created_document.id),
+                    str(created_job.id)
+                )
+
+            except Exception:
+                # local development without Celery
+                pass
+
+
+
+            uploaded_documents.append(
+                DocumentUploadResponse(
+                    message="Document uploaded successfully",
+                    document=DocumentRead.model_validate(
+                        created_document
+                    ),
+                    job=DocumentProcessingJobRead.model_validate(
+                        created_job
+                    )
+                )
+            )
+
+
+        return uploaded_documents
 
     async def get_document_by_id(self, document_id: uuid.UUID) -> DocumentRead:
         doc = await self.doc_repo.get_active_by_id(document_id)

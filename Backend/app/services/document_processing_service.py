@@ -119,6 +119,12 @@ class DocumentProcessingPipeline:
             # ── Step 7: Mark Complete ────────────────────────────────────────
             await self._update_status(job, document, JobStatus.COMPLETED, "COMPLETED")
 
+            # check course is active, if not, activate it
+            if not document.course.is_active:
+                document.course.is_active = True
+                self.session.add(document.course)
+                await self.session.commit()
+
             return {
                 "status": "COMPLETED",
                 "document_id": document_id_str,

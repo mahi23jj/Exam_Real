@@ -1,10 +1,10 @@
-from typing import List
+from typing import List, Optional
 import uuid
-from fastapi import APIRouter, Depends, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, UploadFile, File, Form, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
-from app.db.models.document import DocumentType
+from app.db.models.document import DocumentType, JobStatus
 from app.db.models.user import User
 from app.db.session import get_db
 from app.schemas.document import DocumentRead, DocumentProcessingJobRead, DocumentUploadResponse, DocumentListResponse
@@ -28,7 +28,7 @@ async def upload_document(
 ) -> List[DocumentUploadResponse]:
     """Uploads document to Cloudinary, creates Document record & Processing Job, enqueues background processing, and immediately returns."""
     service = DocumentService(db)
-    return await service.upload_document(
+    return await service.upload_documents(
         course_id=course_id,
         files=files,
         doc_type=doc_type,
@@ -44,11 +44,16 @@ async def upload_document(
 )
 async def list_course_documents(
     course_id: uuid.UUID,
+    status: Optional[List[JobStatus]] = Query(
+        None,
+        description="Filter by processing status; repeat the param to match several (e.g. status=PENDING&status=PROCESSING)"
+    ),
+    doc_type: Optional[DocumentType] = Query(None, description="Filter by NOTE or PAST_EXAM"),
     db: AsyncSession = Depends(get_db)
 ) -> DocumentListResponse:
-    """Retrieves list of active documents in a course."""
+    """Retrieves list of active documents in a course, optionally filtered by status and type."""
     service = DocumentService(db)
-    return await service.list_course_documents(course_id)
+    return await service.list_course_documents(course_id, statuses=status, doc_type=doc_type)
 
 
 @router.get(

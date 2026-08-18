@@ -25,6 +25,11 @@ class CourseRepository(BaseRepository[Course]):
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
+    async def code_exists(self, code: str) -> bool:
+        statement = select(Course.id).where(Course.code == code.upper().strip())
+        result = await self.session.execute(statement)
+        return result.first() is not None
+
     async def get_active_by_id(self, id: uuid.UUID) -> Optional[Course]:
         statement = (
             select(Course)

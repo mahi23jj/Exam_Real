@@ -1,3 +1,4 @@
+import re
 import uuid
 from typing import Optional, List, Tuple, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,20 +47,25 @@ class CourseService:
         self.course_repo = CourseRepository(session)
         self.study_repo = RecentStudyItemRepository(session)
 
-    async def create_course(self, course_in: CourseCreate, current_user: User) -> Course:
-        """Creates a new course entity."""
-        existing = await self.course_repo.get_by_code(course_in.code)
-        if existing:
-            raise CourseCodeExistsException()
+    async def _generate_unique_code(self, title: str) -> str:
+        """Builds a course code from the title plus a random suffix, retrying on collision."""
+        prefix = re.sub(r"[^A-Za-z0-9]", "", title).upper()[:8] or "COURSE"
+        for _ in range(10):
+            code = f"{prefix}-{uuid.uuid4().hex[:6].upper()}"
+            if not await self.course_repo.code_exists(code):
+                return code
+        raise CourseCodeExistsException()
 
+    async def create_course(self, course_in: CourseCreate, current_user: User) -> Course:
+        """Creates a new course entity with a server-generated code."""
         course = Course(
-            code=course_in.code.upper().strip(),
+            code=await self._generate_unique_code(course_in.title),
             title=course_in.title.strip(),
             description=course_in.description,
             category=course_in.category.strip() if course_in.category else None,
             visibility=course_in.visibility,
             created_by_user_id=current_user.id,
-            is_active=False
+            is_active=True
         )
         return await self.course_repo.create(course)
 

@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from fastapi import UploadFile, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -183,8 +183,13 @@ class DocumentService:
             raise DocumentNotFoundException()
         return DocumentRead.model_validate(doc)
 
-    async def list_course_documents(self, course_id: uuid.UUID) -> DocumentListResponse:
-        docs = await self.doc_repo.list_by_course(course_id)
+    async def list_course_documents(
+        self,
+        course_id: uuid.UUID,
+        statuses: Optional[List[JobStatus]] = None,
+        doc_type: Optional[DocumentType] = None
+    ) -> DocumentListResponse:
+        docs = await self.doc_repo.list_by_course(course_id, statuses=statuses, doc_type=doc_type)
         items = [DocumentRead.model_validate(d) for d in docs]
         return DocumentListResponse(items=items, total=len(items))
 

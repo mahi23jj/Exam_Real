@@ -108,7 +108,7 @@ const LoginCard: React.FC<LoginCardProps> = ({ onToggle }) => {
     setLoading(true);
     try {
       await login(email, password);
-      // On success, AuthContext navigates to '/'
+      // On success, AuthContext navigates to '/courses'
       setSuccess(true);
     } catch (err) {
       setFormError(parseAuthError(err));

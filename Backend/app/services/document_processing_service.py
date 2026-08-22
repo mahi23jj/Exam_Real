@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.db.models.document import Document, FileType, DocumentType, JobStatus
@@ -23,6 +24,7 @@ from app.ai.vision.florence_provider import FlorenceVisionProvider
 from app.services.storage_service import StorageService
 from app.services.analytics_service import AnalyticsService
 from app.ai.retrieval.vector_store import VectorStoreRetriever
+
 
 logger = logging.getLogger(__name__)
 
@@ -45,36 +47,88 @@ class DocumentProcessingPipeline:
         self.vision_provider = FlorenceVisionProvider()
         self.embedding_provider = BGEM3EmbeddingProvider()
 
-    async def run_pipeline(self, document_id_str: str, job_id_str: str) -> Dict[str, Any]:
+    async def run_pipeline(
+    self,
+    document_id_str: str,
+    job_id_str: str
+) -> Dict[str, Any]:
         doc_uuid = uuid.UUID(document_id_str)
         job_uuid = uuid.UUID(job_id_str)
 
-        doc_stmt = select(Document).where(Document.id == doc_uuid)
-        document = (await self.session.execute(doc_stmt)).scalar_one_or_none()
+        # ── Load document + course ─────────────────────────────────────────────
+        doc_stmt = (
+            select(Document)
+            .options(selectinload(Document.course))
+            .where(Document.id == doc_uuid)
+        )
 
-        job_stmt = select(DocumentProcessingJob).where(DocumentProcessingJob.id == job_uuid)
-        job = (await self.session.execute(job_stmt)).scalar_one_or_none()
+        document = (
+            await self.session.execute(doc_stmt)
+        ).scalar_one_or_none()
+
+        # ── Load processing job ────────────────────────────────────────────────
+        job_stmt = (
+            select(DocumentProcessingJob)
+            .where(DocumentProcessingJob.id == job_uuid)
+        )
+
+        job = (
+            await self.session.execute(job_stmt)
+        ).scalar_one_or_none()
 
         if not document or not job:
-            raise ValueError(f"Document {document_id_str} or Job {job_id_str} not found.")
+            raise ValueError(
+                f"Document {document_id_str} or Job {job_id_str} not found."
+            )
 
-        await self._update_status(job, document, JobStatus.PROCESSING, "PARSING_DOCUMENT")
+        await self._update_status(
+            job,
+            document,
+            JobStatus.PROCESSING,
+            "PARSING_DOCUMENT"
+        )
 
         try:
-            # ── Step 1: Download & Parse ─────────────────────────────────────
-            file_bytes = await self.storage_service.get_document_bytes(document.cloudinary_secure_url)
-            pages: List[Dict[str, Any]] = self._parse_document(document, file_bytes)
+            # ── Step 1: Download & Parse ────────────────────────────────────────
+            file_bytes = await self.storage_service.get_document_bytes(
+                document.cloudinary_secure_url
+            )
 
-            # ── Step 2: Vision enrichment for image-heavy pages ──────────────
-            await self._update_status(job, document, JobStatus.PROCESSING, "VISION_ENRICHMENT")
-            pages = await self._enrich_pages_with_vision(document, file_bytes, pages)
+            pages: List[Dict[str, Any]] = self._parse_document(
+                document,
+                file_bytes
+            )
 
-            # ── Step 3: Semantic Chunking ────────────────────────────────────
-            await self._update_status(job, document, JobStatus.PROCESSING, "CHUNKING_CONTENT")
-            chunker = SemanticChunker(target_chunk_size=500, overlap=50)
+            # ── Step 2: Vision enrichment for image-heavy pages ────────────────
+            await self._update_status(
+                job,
+                document,
+                JobStatus.PROCESSING,
+                "VISION_ENRICHMENT"
+            )
+
+            pages = await self._enrich_pages_with_vision(
+                document,
+                file_bytes,
+                pages
+            )
+
+            # ── Step 3: Semantic Chunking ──────────────────────────────────────
+            await self._update_status(
+                job,
+                document,
+                JobStatus.PROCESSING,
+                "CHUNKING_CONTENT"
+            )
+
+            chunker = SemanticChunker(
+                target_chunk_size=500,
+                overlap=50
+            )
+
             blocks_data = chunker.chunk_document_pages(pages)
 
-            # ── Step 4: Save ContentBlocks (bulk insert) ─────────────────────
+            # ── Step 4: Save ContentBlocks ─────────────────────────────────────
             db_content_blocks = [
                 ContentBlock(
                     document_id=document.id,
@@ -85,17 +139,28 @@ class DocumentProcessingPipeline:
                 )
                 for b in blocks_data
             ]
+
             self.session.add_all(db_content_blocks)
+
             await self.session.commit()
+
+            # Refresh IDs/defaults after insert
             for cb in db_content_blocks:
                 await self.session.refresh(cb)
 
-            # ── Step 5: Generate Embeddings (BGE-M3, batched) ────────────────
-            await self._update_status(job, document, JobStatus.PROCESSING, "GENERATING_EMBEDDINGS")
+            # ── Step 5: Generate Embeddings ────────────────────────────────────
+            await self._update_status(
+                job,
+                document,
+                JobStatus.PROCESSING,
+                "GENERATING_EMBEDDINGS"
+            )
+
             texts = [cb.content for cb in db_content_blocks]
 
             if texts:
                 vectors = await self.embedding_provider.embed_batch(texts)
+
                 embeddings = [
                     Embedding(
                         content_block_id=cb.id,
@@ -104,26 +169,53 @@ class DocumentProcessingPipeline:
                     )
                     for cb, vector in zip(db_content_blocks, vectors)
                 ]
+
                 self.session.add_all(embeddings)
+
                 await self.session.commit()
 
-            # ── Step 6: Exam Extraction (if PAST_EXAM) ───────────────────────
+            # ── Step 6: Exam Extraction ─────────────────────────────────────────
             if document.doc_type == DocumentType.PAST_EXAM:
-                await self._extract_and_save_exam(document, job, pages, db_content_blocks)
-                
-                # ── Step 6.5: Analytics Update ───────────────────────────────────
-                await self._update_status(job, document, JobStatus.PROCESSING, "UPDATING_ANALYTICS")
+
+                await self._extract_and_save_exam(
+                    document,
+                    job,
+                    pages,
+                    db_content_blocks
+                )
+
+                # ── Step 6.5: Analytics Update ─────────────────────────────────
+                await self._update_status(
+                    job,
+                    document,
+                    JobStatus.PROCESSING,
+                    "UPDATING_ANALYTICS"
+                )
+
                 analytics_service = AnalyticsService(self.session)
-                await analytics_service.update_course_analytics(document.course_id)
 
-            # ── Step 7: Mark Complete ────────────────────────────────────────
-            await self._update_status(job, document, JobStatus.COMPLETED, "COMPLETED")
+                await analytics_service.update_course_analytics(
+                    document.course_id
+                )
 
-            # check course is active, if not, activate it
-            if not document.course.is_active:
+            # ── Step 7: Activate course if necessary ───────────────────────────
+            # Course was eagerly loaded with selectinload(), so this does NOT
+            # trigger an implicit async lazy-load.
+            if document.course and not document.course.is_active:
                 document.course.is_active = True
                 self.session.add(document.course)
+
                 await self.session.commit()
+
+            # ── Step 8: Mark everything COMPLETED ──────────────────────────────
+            # This MUST be the final status update so COMPLETED really means
+            # the entire pipeline finished successfully.
+            await self._update_status(
+                job,
+                document,
+                JobStatus.COMPLETED,
+                "COMPLETED"
+            )
 
             return {
                 "status": "COMPLETED",
@@ -133,14 +225,35 @@ class DocumentProcessingPipeline:
             }
 
         except Exception as exc:
-            logger.error(f"Pipeline error for document {document_id_str}: {exc}", exc_info=True)
-            job.status = JobStatus.FAILED
-            job.current_step = "FAILED"
-            job.error_message = str(exc)
-            document.status = JobStatus.FAILED
-            self.session.add(job)
-            self.session.add(document)
-            await self.session.commit()
+            logger.error(
+                f"Pipeline error for document {document_id_str}: {exc}",
+                exc_info=True
+            )
+
+            # Make sure the session is usable after any failed transaction.
+            await self.session.rollback()
+
+            try:
+                job.status = JobStatus.FAILED
+                job.current_step = "FAILED"
+                job.error_message = str(exc)
+
+                document.status = JobStatus.FAILED
+
+                self.session.add(job)
+                self.session.add(document)
+
+                await self.session.commit()
+
+            except Exception as status_exc:
+                logger.error(
+                    f"Failed to update failed status for document "
+                    f"{document_id_str}: {status_exc}",
+                    exc_info=True
+                )
+
+                await self.session.rollback()
+
             raise
 
     def _parse_document(self, document: Document, file_bytes: bytes) -> List[Dict[str, Any]]:

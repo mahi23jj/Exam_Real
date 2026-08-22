@@ -14,6 +14,9 @@ import { createCourse, type CourseRead } from '../services/courseService';
 import {
   uploadDocuments,
   ACCEPTED_UPLOAD_EXTENSIONS,
+  ACCEPTED_UPLOAD_ACCEPT,
+  PDF_ONLY_UPLOAD_MESSAGE,
+  isPdfFile,
   MAX_UPLOAD_FILES,
 } from '../services/documentService';
 
@@ -81,8 +84,14 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ open, onClose, on
       }
 
       const extension = '.' + file.name.split('.').pop()?.toLowerCase();
-      if (!allowedExtensions.includes(extension)) {
-        newFileItems.push({ id: Math.random().toString(), file, status: 'error', progress: 0, error: 'File format not supported' });
+      if (!allowedExtensions.includes(extension) || !isPdfFile(file)) {
+        newFileItems.push({
+          id: Math.random().toString(),
+          file,
+          status: 'error',
+          progress: 0,
+          error: PDF_ONLY_UPLOAD_MESSAGE,
+        });
         return;
       }
 

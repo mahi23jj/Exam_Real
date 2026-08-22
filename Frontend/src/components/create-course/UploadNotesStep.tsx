@@ -4,6 +4,7 @@ import StepIndicator from './StepIndicator';
 import FileUploadZone from './FileUploadZone';
 import FileList from './FileList';
 import type { FileItem } from './FileList';
+import { ACCEPTED_UPLOAD_ACCEPT, PDF_ONLY_UPLOAD_MESSAGE } from '../../services/documentService';
 
 interface UploadNotesStepProps {
   files: FileItem[];
@@ -39,9 +40,10 @@ const UploadNotesStep: React.FC<UploadNotesStepProps> = ({
 
       <FileUploadZone
         onFilesSelected={onFilesSelected}
-        accept=".pdf,.ppt,.pptx,.png,.jpg,.jpeg,.webp"
+        accept={ACCEPTED_UPLOAD_ACCEPT}
         disabled={isUploading}
       />
+      <p className="text-xs text-stone-400 text-center">{PDF_ONLY_UPLOAD_MESSAGE}</p>
 
       <div className="max-h-48 overflow-y-auto pr-2">
         <FileList

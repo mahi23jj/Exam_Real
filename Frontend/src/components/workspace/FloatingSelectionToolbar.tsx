@@ -1,10 +1,10 @@
 import React from 'react';
 import { Pin, HelpCircle, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { TextSelection } from '../../types/workspace';
+import type { DocumentSelection } from '../../types/workspace';
 
 interface FloatingSelectionToolbarProps {
-  selection: TextSelection | null;
+  selection: DocumentSelection | null;
   onPin: () => void;
   onAskQuestion: () => void;
   onAskAI: () => void;

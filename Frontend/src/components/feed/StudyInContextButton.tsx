@@ -21,7 +21,7 @@ const StudyInContextButton: React.FC<StudyInContextButtonProps> = ({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigate(`/course/${courseId}`, {
+    navigate(`/workspace/${courseId}`, {
       state: { documentId, sectionId, highlightText },
     });
   };

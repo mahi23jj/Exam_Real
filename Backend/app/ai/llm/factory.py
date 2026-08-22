@@ -23,4 +23,4 @@ def get_llm_provider(provider_name: str | None = None) -> BaseLLMProvider:
         return GroqProvider()
     else:
         # Fallback to OpenAI
-        return OpenAIProvider()
+        return GroqProvider()

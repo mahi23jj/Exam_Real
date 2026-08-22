@@ -117,7 +117,7 @@ const Courses: React.FC = () => {
       } catch {
         // Tracking is best-effort; never block navigation on it.
       }
-      navigate(`/course/${course.id}`);
+      navigate(`/workspace/${course.id}`);
     },
     [navigate, loadContinue],
   );
@@ -220,9 +220,10 @@ const Courses: React.FC = () => {
           tag={course.category}
           isActive={course.is_active !== false}
           onOpen={course.is_active === false ? undefined : () => void openCourse(course)}
+          onManage={() => navigate(`/course/${course.id}`)}
         />
       ));
-  }, [activeTab, explore, following, mine, matchesSearch, openCourse]);
+  }, [activeTab, explore, following, mine, matchesSearch, openCourse, navigate]);
 
   const tabsItems: TabItem<TabId>[] = [
     { id: 'explore', label: 'Explore', count: activeTab === 'explore' ? total : undefined },

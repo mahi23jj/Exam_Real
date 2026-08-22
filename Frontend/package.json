@@ -20,6 +20,7 @@
     "framer-motion": "^12.12.2",
     "globals": "^16.4.0",
     "lucide-react": "^0.462.0",
+    "pdfjs-dist": "^4.10.38",
     "postcss": "^8.4.49",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

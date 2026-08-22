@@ -121,6 +121,13 @@ const CourseCard: React.FC<CourseCardProps> = ({
             {isFollowing ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
             {isFollowing ? 'Following' : 'Follow'}
           </button>
+        ) : variant === 'mine' && onManage ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onManage(); }}
+            className="text-[10px] font-bold text-stone-400 uppercase tracking-wider hover:text-teal-700 transition-colors"
+          >
+            Manage course
+          </button>
         ) : (
           <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
             {lastUpdated ? `Updated ${lastUpdated}` : 'Creator'}
@@ -128,11 +135,11 @@ const CourseCard: React.FC<CourseCardProps> = ({
         )}
 
         <button
-          onClick={onOpen ?? onManage}
-          disabled={!isActive}
+          onClick={onOpen}
+          disabled={!isActive || !onOpen}
           className="flex items-center gap-1.5 text-xs font-bold text-teal-700 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0 disabled:text-stone-400"
         >
-          {onOpen ? 'Open' : 'Manage'}
+          Open
           <ArrowUpRight className="w-3.5 h-3.5" />
         </button>
       </div>

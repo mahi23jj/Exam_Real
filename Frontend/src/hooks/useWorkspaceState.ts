@@ -4,7 +4,7 @@ import type {
   ContextPanelMode,
   NotesChipTab,
   SplitViewMode,
-  TextSelection,
+  DocumentSelection,
   PracticeState,
   KnowledgePin,
   PublicQuestion,
@@ -19,7 +19,7 @@ export interface WorkspaceState {
   notesTab: NotesChipTab;
   activeDocumentId: string | null;
   activeDocument: CourseDocument | null;
-  selection: TextSelection | null;
+  selection: DocumentSelection | null;
   selectedPinId: string | null;
   selectedQuestionId: string | null;
   practice: PracticeState | null;
@@ -36,7 +36,7 @@ export interface WorkspaceState {
 
 type WorkspaceAction =
   | { type: 'OPEN_DOCUMENT'; documentId: string; document: CourseDocument }
-  | { type: 'SELECT_TEXT'; selection: TextSelection }
+  | { type: 'SELECT_TEXT'; selection: DocumentSelection }
   | { type: 'CLEAR_SELECTION' }
   | { type: 'SET_NOTES_TAB'; tab: NotesChipTab }
   | { type: 'LOCATE_IN_DOCUMENT'; target: LocateTarget }
@@ -261,7 +261,7 @@ export function useWorkspaceState(
     dispatch({ type: 'OPEN_DOCUMENT', documentId, document });
   }, []);
 
-  const selectText = useCallback((selection: TextSelection) => {
+  const selectText = useCallback((selection: DocumentSelection) => {
     dispatch({ type: 'SELECT_TEXT', selection });
   }, []);
 

@@ -15,7 +15,7 @@ from app.db.models.social import (
 
 class UserSummary(BaseModel):
     id: uuid.UUID
-    full_name: str
+    full_name: Optional[str] = None
     email: str
 
     model_config = ConfigDict(from_attributes=True)

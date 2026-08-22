@@ -32,7 +32,7 @@ const CourseHeader: React.FC<CourseHeaderProps> = ({
     <header className="h-14 flex-shrink-0 border-b border-stone-200/60 bg-background/90 backdrop-blur-xl z-20">
       <div className="h-full px-4 lg:px-6 flex items-center gap-3 lg:gap-4">
         <Link
-          to="/"
+          to="/courses"
           className="hidden sm:flex items-center justify-center w-8 h-8 rounded-xl text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
           title="Back to courses"
         >

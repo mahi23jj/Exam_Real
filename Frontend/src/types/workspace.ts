@@ -1,9 +1,16 @@
+import type { DocumentSelection } from './documentSelection';
+
+export type { DocumentSelection };
+
 export type PinType =
   | 'memory_trick'
   | 'implementation_tip'
   | 'exam_hint'
   | 'warning'
-  | 'explanation';
+  | 'explanation'
+  | 'common_mistake'
+  | 'formula_tip'
+  | 'other';
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
@@ -52,6 +59,7 @@ export interface KnowledgePin {
   id: string;
   type: PinType;
   content: string;
+  title?: string;
   author: Author;
   likes: number;
   replies: Comment[];
@@ -59,10 +67,15 @@ export interface KnowledgePin {
   documentId: string;
   createdAt: string;
   pageIndex?: number;
+  pageNumber?: number;
+  locationMetadata?: Record<string, unknown>;
+  isLikedByMe?: boolean;
+  isSavedByMe?: boolean;
 }
 
 export interface PublicQuestion {
   id: string;
+  title?: string;
   anchorText: string;
   content: string;
   author: Author;
@@ -70,6 +83,11 @@ export interface PublicQuestion {
   replies: Comment[];
   documentId: string;
   createdAt: string;
+  pageNumber?: number;
+  locationMetadata?: Record<string, unknown>;
+  status?: string;
+  isLikedByMe?: boolean;
+  isSavedByMe?: boolean;
 }
 
 export interface ExamQuestion {
@@ -108,6 +126,9 @@ export interface NoteDocument {
   sections: NoteSection[];
   pins: KnowledgePin[];
   questions: PublicQuestion[];
+  fileUrl?: string | null;
+  fileType?: string | null;
+  documentVersion?: number;
 }
 
 export interface PastExamDocument {
@@ -116,6 +137,9 @@ export interface PastExamDocument {
   type: 'past_exam';
   intro: string;
   questions: ExamQuestion[];
+  fileUrl?: string | null;
+  fileType?: string | null;
+  documentVersion?: number;
 }
 
 export type CourseDocument = NoteDocument | PastExamDocument;
@@ -142,10 +166,8 @@ export interface CourseWorkspaceData {
   documents: Record<string, CourseDocument>;
 }
 
-export interface TextSelection {
-  text: string;
-  rect: DOMRect;
-}
+/** @deprecated Use DocumentSelection */
+export type TextSelection = DocumentSelection;
 
 export interface PracticeState {
   questionId: string;

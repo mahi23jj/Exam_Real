@@ -1,5 +1,6 @@
 import uuid
 from typing import Optional, List, Tuple
+from app.db.models.user import User
 from sqlmodel import select, col, func, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -29,7 +30,6 @@ class KnowledgePinRepository(BaseRepository[KnowledgePin]):
     async def get_by_id_with_author(self, pin_id: uuid.UUID) -> Optional[KnowledgePin]:
         statement = (
             select(KnowledgePin)
-            .options(selectinload(KnowledgePin.author))
             .where(and_(KnowledgePin.id == pin_id, KnowledgePin.is_active == True))
         )
         result = await self.session.execute(statement)
@@ -51,7 +51,7 @@ class KnowledgePinRepository(BaseRepository[KnowledgePin]):
         sort_order: str = "desc"
     ) -> Tuple[List[KnowledgePin], int]:
         """Lists pins enforcing visibility rules and flexible filtering."""
-        statement = select(KnowledgePin).options(selectinload(KnowledgePin.author)).where(KnowledgePin.is_active == True)
+        statement = select(KnowledgePin).where(KnowledgePin.is_active == True)
 
         if document_id:
             statement = statement.where(KnowledgePin.document_id == document_id)
@@ -200,8 +200,11 @@ class LearningQuestionRepository(BaseRepository[LearningQuestion]):
     async def get_by_id_with_author(self, question_id: uuid.UUID) -> Optional[LearningQuestion]:
         statement = (
             select(LearningQuestion)
-            .options(selectinload(LearningQuestion.author))
-            .where(and_(LearningQuestion.id == question_id, LearningQuestion.is_active == True))
+           
+            .where(and_(LearningQuestion.id == question_id, 
+                        LearningQuestion.is_active == True,
+                    
+                        ))
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
@@ -222,7 +225,7 @@ class LearningQuestionRepository(BaseRepository[LearningQuestion]):
     ) -> Tuple[List[LearningQuestion], int]:
         statement = (
             select(LearningQuestion)
-            .options(selectinload(LearningQuestion.author))
+            
             .where(LearningQuestion.is_active == True)
         )
 

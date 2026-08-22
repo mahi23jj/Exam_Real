@@ -1,13 +1,12 @@
 import React, { useRef, useCallback, useEffect } from 'react';
 import { Pin } from 'lucide-react';
-import type { NoteDocument, KnowledgePin, PublicQuestion, LocateTarget } from '../../types/workspace';
-import type { TextSelection } from '../../types/workspace';
+import type { NoteDocument, KnowledgePin, PublicQuestion, LocateTarget, DocumentSelection } from '../../types/workspace';
 
 interface PDFViewerProps {
   document: NoteDocument;
   highlightSectionId?: string | null;
   locateTarget?: LocateTarget | null;
-  onTextSelect: (selection: TextSelection) => void;
+  onTextSelect: (selection: DocumentSelection) => void;
   onPinClick: (pinId: string) => void;
   onQuestionClick: (questionId: string) => void;
 }
@@ -36,7 +35,24 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
     const range = sel.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return;
-    onTextSelect({ text: sel.toString().trim(), rect });
+    const text = sel.toString().trim();
+    onTextSelect({
+      selectedText: text,
+      pageNumber: 1,
+      pageDimensions: { width: 595, height: 842 },
+      bbox: { x: 0, y: 0, width: 0, height: 0 },
+      startOffset: 0,
+      endOffset: text.length,
+      documentId: document.id,
+      documentVersion: document.documentVersion ?? 1,
+      rect,
+      locationMetadata: {
+        version: 1,
+        source: 'mock',
+        page_dimensions: { width: 595, height: 842 },
+        regions: [{ type: 'question_text', bbox: { x: 0, y: 0, width: 0, height: 0 } }],
+      },
+    });
   }, [onTextSelect]);
 
   const renderTextWithHighlights = (

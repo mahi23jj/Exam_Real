@@ -77,7 +77,7 @@ class ExamExtractor:
 
     @staticmethod
     async def extract_questions_from_text(raw_text: str) -> ExtractedExamSchema:
-        llm = get_llm_provider()
+        llm = get_llm_provider("groq")
         system_prompt = (
             "You are an expert academic exam analyzer. "
             "Your task is to extract exam questions and transform them into structured educational intelligence strictly conforming to the schema. "

@@ -3,15 +3,11 @@ import { Download, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import type { CourseDocument } from '../../services/documentService';
+import DocumentFileFrame from './DocumentFileFrame';
 
 interface DocumentPreviewProps {
   document: CourseDocument;
   onClose: () => void;
-}
-
-/** Office files cannot render inline, so they go through Microsoft's public viewer. */
-function officeViewerUrl(url: string): string {
-  return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
 }
 
 const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onClose }) => {
@@ -51,17 +47,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onClose }) 
         </div>
 
         <div className="flex-1 min-h-0 bg-stone-50">
-          {!url ? (
-            <div className="h-full flex items-center justify-center text-sm text-stone-400">
-              This document has no file URL.
-            </div>
-          ) : fileType === 'IMAGE' ? (
-            <img src={url} alt={name} className="w-full h-full object-contain" />
-          ) : fileType === 'PPT' || fileType === 'PPTX' ? (
-            <iframe title={name} src={officeViewerUrl(url)} className="w-full h-full border-0" />
-          ) : (
-            <iframe title={name} src={url} className="w-full h-full border-0" />
-          )}
+          <DocumentFileFrame url={url} name={name} fileType={fileType} />
         </div>
       </motion.div>
     </div>

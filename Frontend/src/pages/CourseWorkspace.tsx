@@ -1,10 +1,19 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useParams, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 
-import { getWorkspaceData } from '../data/workspaceMockData';
+import { getCourse } from '../services/courseService';
+import { fetchCourseDocuments } from '../services/documentService';
+import {
+  createPin,
+  createLearningQuestion,
+  listPins,
+  listLearningQuestions,
+} from '../services/socialService';
+import { mapCourseToWorkspace } from '../utils/mapCourseWorkspace';
+import { mapPinFromApi, mapQuestionFromApi, PIN_TYPE_TO_API } from '../utils/socialMappers';
 import { useWorkspaceState } from '../hooks/useWorkspaceState';
 import type {
   PastExamDocument,
@@ -48,15 +57,37 @@ const MOCK_CHAT_HISTORY: ChatConversation[] = [
 
 const CourseWorkspace: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
-  const courseData = courseId ? getWorkspaceData(courseId) : null;
+  const location = useLocation();
+  const [courseData, setCourseData] = useState<ReturnType<typeof mapCourseToWorkspace> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadWorkspace = useCallback(async () => {
+    if (!courseId) return;
+    setLoading(true);
+    try {
+      const [course, docs] = await Promise.all([
+        getCourse(courseId),
+        fetchCourseDocuments(courseId, { status: ['COMPLETED'] }),
+      ]);
+      setCourseData(mapCourseToWorkspace(course, docs));
+      setError(null);
+    } catch (err) {
+      setCourseData(null);
+      setError(err instanceof Error ? err.message : 'Failed to load course');
+    } finally {
+      setLoading(false);
+    }
+  }, [courseId]);
+
+  useEffect(() => {
+    void loadWorkspace();
+  }, [loadWorkspace]);
 
   const defaultOpenFolders = useMemo(
-    () => courseData?.folders.filter((f) => f.defaultOpen).map((f) => f.id) ?? [],
+    () => courseData?.folders.filter((f) => f.defaultOpen).map((f) => f.id) ?? ['folder-notes', 'folder-exams'],
     [courseData],
   );
-
-  const initialDocId = 'note-memory-management';
-  const initialDoc = courseData?.documents[initialDocId] ?? null;
 
   const {
     state,
@@ -71,31 +102,57 @@ const CourseWorkspace: React.FC = () => {
     openSplitLearning,
     setSplitMode,
     toggleFolder,
-  } = useWorkspaceState(initialDocId, initialDoc, defaultOpenFolders);
+  } = useWorkspaceState(null, null, defaultOpenFolders);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [jumpToQuestionId, setJumpToQuestionId] = useState<string | null>(null);
-  const [localPins, setLocalPins] = useState<KnowledgePin[]>([]);
-  const [localQuestions, setLocalQuestions] = useState<PublicQuestion[]>([]);
+  const [documentAnnotations, setDocumentAnnotations] = useState<
+    Record<string, { pins: KnowledgePin[]; questions: PublicQuestion[] }>
+  >({});
+  const [savingPin, setSavingPin] = useState(false);
+  const [savingQuestion, setSavingQuestion] = useState(false);
+
+  const loadDocumentAnnotations = useCallback(async (documentId: string) => {
+    try {
+      const [pinsRes, questionsRes] = await Promise.all([
+        listPins({ document_id: documentId }),
+        listLearningQuestions({ document_id: documentId }),
+      ]);
+      setDocumentAnnotations((prev) => ({
+        ...prev,
+        [documentId]: {
+          pins: pinsRes.items.map(mapPinFromApi),
+          questions: questionsRes.items.map(mapQuestionFromApi),
+        },
+      }));
+    } catch {
+      setDocumentAnnotations((prev) => ({
+        ...prev,
+        [documentId]: prev[documentId] ?? { pins: [], questions: [] },
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!state.activeDocumentId) return;
+    void loadDocumentAnnotations(state.activeDocumentId);
+  }, [state.activeDocumentId, loadDocumentAnnotations]);
 
   const activeNoteDoc = useMemo(() => {
     if (state.activeDocument?.type !== 'note') return null;
     const base = state.activeDocument as NoteDocument;
+    const annotations = documentAnnotations[base.id];
     return {
       ...base,
-      pins: [...base.pins, ...localPins.filter((p) => p.documentId === base.id)],
-      questions: [...base.questions, ...localQuestions.filter((q) => q.documentId === base.id)],
+      pins: annotations?.pins ?? base.pins,
+      questions: annotations?.questions ?? base.questions,
     };
-  }, [state.activeDocument, localPins, localQuestions]);
+  }, [state.activeDocument, documentAnnotations]);
 
   const activeDocument = useMemo(() => {
     if (state.activeDocument?.type === 'note' && activeNoteDoc) return activeNoteDoc;
     return state.activeDocument;
   }, [state.activeDocument, activeNoteDoc]);
-
-  if (!courseData) {
-    return <Navigate to="/" replace />;
-  }
 
   const practiceQuestion: ExamQuestion | null = useMemo(() => {
     if (!state.practice || state.activeDocument?.type !== 'past_exam') return null;
@@ -111,13 +168,20 @@ const CourseWorkspace: React.FC = () => {
   }, [state.splitMode, practiceQuestion]);
 
   const handleFileSelect = (documentId: string) => {
-    const doc = courseData.documents[documentId];
+    const doc = courseData?.documents[documentId];
     if (doc) {
-      setLocalPins([]);
-      setLocalQuestions([]);
       openDocument(documentId, doc);
     }
   };
+
+  useEffect(() => {
+    const targetId = (location.state as { documentId?: string } | null)?.documentId;
+    if (!targetId || !courseData) return;
+    const doc = courseData.documents[targetId];
+    if (doc) {
+      openDocument(targetId, doc);
+    }
+  }, [courseData, location.state, openDocument]);
 
   const handlePinFromSelection = () => {
     dispatch({ type: 'SET_CONTEXT_MODE', mode: 'create_pin' });
@@ -135,46 +199,93 @@ const CourseWorkspace: React.FC = () => {
   };
 
   const handleSavePin = useCallback(
-    (data: { type: KnowledgePin['type']; note: string; anchorText: string }) => {
-      if (!state.activeDocumentId) return;
-      const pin: KnowledgePin = {
-        id: `pin-local-${Date.now()}`,
-        type: data.type,
-        content: data.note || data.anchorText,
-        author: { id: '2', name: 'Alex', initials: 'AL' },
-        likes: 0,
-        replies: [],
-        anchorText: data.anchorText,
-        documentId: state.activeDocumentId,
-        createdAt: 'Just now',
-      };
-      setLocalPins((prev) => [...prev, pin]);
-      clearSelection();
-      dispatch({ type: 'SET_NOTES_TAB', tab: 'pins' });
-      toast.success('Knowledge pin saved', { className: 'premium-shadow rounded-2xl border-none' });
+    async (data: {
+      title: string;
+      type: KnowledgePin['type'];
+      note: string;
+      anchorText: string;
+      visibility: import('../services/socialService').ApiVisibility;
+    }) => {
+      if (!state.activeDocumentId || !state.selection) return;
+      setSavingPin(true);
+      try {
+        const created = await createPin({
+          title: data.title,
+          content: data.note || data.anchorText,
+          pin_type: PIN_TYPE_TO_API[data.type],
+          visibility: data.visibility,
+          page_number: state.selection.pageNumber,
+          target_type: 'PARAGRAPH',
+          target_id: null,
+          selection_start_offset: state.selection.startOffset,
+          selection_end_offset: state.selection.endOffset,
+          selected_text_snapshot: state.selection.selectedText,
+          location_metadata_json: state.selection.locationMetadata,
+          document_id: state.activeDocumentId,
+          document_version: state.selection.documentVersion,
+        });
+        const mapped = mapPinFromApi(created);
+        setDocumentAnnotations((prev) => ({
+          ...prev,
+          [state.activeDocumentId!]: {
+            pins: [...(prev[state.activeDocumentId!]?.pins ?? []), mapped],
+            questions: prev[state.activeDocumentId!]?.questions ?? [],
+          },
+        }));
+        clearSelection();
+        dispatch({ type: 'SET_NOTES_TAB', tab: 'pins' });
+        toast.success('Knowledge pin saved', { className: 'premium-shadow rounded-2xl border-none' });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to save pin');
+      } finally {
+        setSavingPin(false);
+      }
     },
-    [state.activeDocumentId, clearSelection, dispatch],
+    [state.activeDocumentId, state.selection, clearSelection, dispatch],
   );
 
   const handlePostQuestion = useCallback(
-    (data: { anchorText: string; content: string }) => {
-      if (!state.activeDocumentId) return;
-      const question: PublicQuestion = {
-        id: `pq-local-${Date.now()}`,
-        anchorText: data.anchorText,
-        content: data.content,
-        author: { id: '2', name: 'Alex', initials: 'AL' },
-        likes: 0,
-        replies: [],
-        documentId: state.activeDocumentId,
-        createdAt: 'Just now',
-      };
-      setLocalQuestions((prev) => [...prev, question]);
-      clearSelection();
-      dispatch({ type: 'SET_NOTES_TAB', tab: 'questions' });
-      toast.success('Question posted', { className: 'premium-shadow rounded-2xl border-none' });
+    async (data: {
+      title: string;
+      anchorText: string;
+      content: string;
+      visibility: import('../services/socialService').ApiVisibility;
+    }) => {
+      if (!state.activeDocumentId || !state.selection) return;
+      setSavingQuestion(true);
+      try {
+        const created = await createLearningQuestion({
+          title: data.title,
+          content: data.content,
+          visibility: data.visibility,
+          page_number: state.selection.pageNumber,
+          target_type: 'PARAGRAPH',
+          target_id: null,
+          selection_start_offset: state.selection.startOffset,
+          selection_end_offset: state.selection.endOffset,
+          selected_text_snapshot: state.selection.selectedText,
+          location_metadata_json: state.selection.locationMetadata,
+          document_id: state.activeDocumentId,
+          document_version: state.selection.documentVersion,
+        });
+        const mapped = mapQuestionFromApi(created);
+        setDocumentAnnotations((prev) => ({
+          ...prev,
+          [state.activeDocumentId!]: {
+            pins: prev[state.activeDocumentId!]?.pins ?? [],
+            questions: [...(prev[state.activeDocumentId!]?.questions ?? []), mapped],
+          },
+        }));
+        clearSelection();
+        dispatch({ type: 'SET_NOTES_TAB', tab: 'questions' });
+        toast.success('Question posted', { className: 'premium-shadow rounded-2xl border-none' });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to post question');
+      } finally {
+        setSavingQuestion(false);
+      }
     },
-    [state.activeDocumentId, clearSelection, dispatch],
+    [state.activeDocumentId, state.selection, clearSelection, dispatch],
   );
 
   const handleLocatePin = (pin: KnowledgePin) => {
@@ -207,8 +318,13 @@ const CourseWorkspace: React.FC = () => {
   const explorerPanel = (
     <aside className="w-full h-full border-r border-stone-200/60 bg-white/80 backdrop-blur-sm">
       <CourseExplorer
-        courseName={courseData.name}
-        folders={courseData.folders}
+        courseName={courseData?.name ?? 'Course'}
+        folders={
+          courseData?.folders ?? [
+            { id: 'folder-notes', name: 'Notes', defaultOpen: true, items: [] },
+            { id: 'folder-exams', name: 'Past Exams', defaultOpen: true, items: [] },
+          ]
+        }
         openFolders={state.openFolders}
         activeDocumentId={state.activeDocumentId}
         onToggleFolder={toggleFolder}
@@ -237,14 +353,30 @@ const CourseWorkspace: React.FC = () => {
         onSetMode={(mode) => dispatch({ type: 'SET_CONTEXT_MODE', mode })}
         onSavePin={handleSavePin}
         onPostQuestion={handlePostQuestion}
+        savingPin={savingPin}
+        savingQuestion={savingQuestion}
       />
     </aside>
   );
 
-  const documentPanel = (
+  const documentPanel = loading ? (
+    <div className="h-full flex items-center justify-center text-stone-400">
+      <Loader2 className="w-6 h-6 animate-spin" />
+    </div>
+  ) : error ? (
+    <div className="h-full flex flex-col items-center justify-center px-6 text-center">
+      <p className="text-sm font-semibold text-rose-600 mb-4">{error}</p>
+      <button
+        onClick={() => void loadWorkspace()}
+        className="px-6 py-3 bg-teal-700 text-white rounded-2xl font-bold text-sm"
+      >
+        Try again
+      </button>
+    </div>
+  ) : (
     <DocumentViewer
       document={activeDocument}
-      documents={courseData.documents}
+      documents={courseData?.documents ?? {}}
       highlightSectionId={highlightSectionId}
       locateTarget={state.locateTarget}
       activeQuestionId={state.practice?.questionId ?? null}
@@ -264,7 +396,7 @@ const CourseWorkspace: React.FC = () => {
 
   const header = (
     <CourseHeader
-      courseName={courseData.name}
+      courseName={courseData?.name ?? 'Course'}
       documentName={activeDocument?.name}
       focusMode={state.focusMode}
       onToggleFocus={() => dispatch({ type: 'TOGGLE_FOCUS' })}
@@ -275,9 +407,13 @@ const CourseWorkspace: React.FC = () => {
     />
   );
 
+  const isPdfActive =
+    activeDocument?.fileUrl &&
+    (activeDocument.fileType === 'PDF' || activeDocument.fileUrl.toLowerCase().includes('.pdf'));
+
   const floatingToolbar = (
     <FloatingSelectionToolbar
-      selection={activeDocument?.type === 'note' ? state.selection : null}
+      selection={isPdfActive ? state.selection : null}
       onPin={handlePinFromSelection}
       onAskQuestion={handleAskQuestion}
       onAskAI={handleAskAI}

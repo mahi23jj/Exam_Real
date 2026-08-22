@@ -14,9 +14,12 @@ interface KnowledgePinCardProps {
 const pinTypeConfig: Record<PinType, { label: string; emoji: string; color: string }> = {
   memory_trick: { label: 'Memory Trick', emoji: '🧠', color: 'bg-purple-50 text-purple-700' },
   implementation_tip: { label: 'Implementation Tip', emoji: '💡', color: 'bg-blue-50 text-blue-700' },
-  exam_hint: { label: 'Exam Hint', emoji: '📝', color: 'bg-amber-50 text-amber-700' },
+  exam_hint: { label: 'Exam Tip', emoji: '📝', color: 'bg-amber-50 text-amber-700' },
   warning: { label: 'Warning', emoji: '⚠️', color: 'bg-rose-50 text-rose-700' },
   explanation: { label: 'Explanation', emoji: '📖', color: 'bg-teal-50 text-teal-700' },
+  common_mistake: { label: 'Common Mistake', emoji: '❌', color: 'bg-orange-50 text-orange-700' },
+  formula_tip: { label: 'Formula Tip', emoji: '📐', color: 'bg-indigo-50 text-indigo-700' },
+  other: { label: 'Other', emoji: '📌', color: 'bg-stone-50 text-stone-700' },
 };
 
 const KnowledgePinCard: React.FC<KnowledgePinCardProps> = ({
@@ -26,7 +29,7 @@ const KnowledgePinCard: React.FC<KnowledgePinCardProps> = ({
   showLocateAction = false,
   onClick,
 }) => {
-  const typeConfig = pinTypeConfig[pin.type];
+  const typeConfig = pinTypeConfig[pin.type] ?? pinTypeConfig.other;
 
   return (
     <motion.button

@@ -1,28 +1,48 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { PinType } from '../../types/workspace';
+import type { ApiVisibility } from '../../services/socialService';
 
 const PIN_TYPES: { value: PinType; label: string }[] = [
   { value: 'memory_trick', label: 'Memory Trick' },
-  { value: 'implementation_tip', label: 'Implementation Tip' },
-  { value: 'exam_hint', label: 'Exam Hint' },
-  { value: 'warning', label: 'Warning' },
   { value: 'explanation', label: 'Explanation' },
+  { value: 'exam_hint', label: 'Exam Tip' },
+  { value: 'warning', label: 'Warning' },
+  { value: 'common_mistake', label: 'Common Mistake' },
+  { value: 'implementation_tip', label: 'Implementation Tip' },
+  { value: 'formula_tip', label: 'Formula Tip' },
+  { value: 'other', label: 'Other' },
+];
+
+const VISIBILITY_OPTIONS: { value: ApiVisibility; label: string }[] = [
+  { value: 'PUBLIC', label: 'Public' },
+  { value: 'FOLLOWERS_ONLY', label: 'Followers Only' },
+  { value: 'PRIVATE', label: 'Private' },
 ];
 
 interface CreatePinPanelProps {
   selectedText: string;
   onCancel: () => void;
-  onSave: (data: { type: PinType; note: string; anchorText: string }) => void;
+  onSave: (data: {
+    title: string;
+    type: PinType;
+    note: string;
+    anchorText: string;
+    visibility: ApiVisibility;
+  }) => void;
+  saving?: boolean;
 }
 
 export const CreatePinPanel: React.FC<CreatePinPanelProps> = ({
   selectedText,
   onCancel,
   onSave,
+  saving = false,
 }) => {
+  const [title, setTitle] = useState(selectedText.slice(0, 80));
   const [note, setNote] = useState('');
-  const [type, setType] = useState<PinType>('memory_trick');
+  const [type, setType] = useState<PinType>('explanation');
+  const [visibility, setVisibility] = useState<ApiVisibility>('PUBLIC');
 
   return (
     <motion.div
@@ -43,6 +63,18 @@ export const CreatePinPanel: React.FC<CreatePinPanelProps> = ({
         >
           "{selectedText}"
         </motion.div>
+      </div>
+
+      <div>
+        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-2 block">
+          Title
+        </label>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Short title for this pin"
+          className="w-full p-3 rounded-xl border border-stone-200 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-300"
+        />
       </div>
 
       <div>
@@ -81,6 +113,23 @@ export const CreatePinPanel: React.FC<CreatePinPanelProps> = ({
         </motion.select>
       </div>
 
+      <div>
+        <label className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-2 block">
+          Visibility
+        </label>
+        <select
+          value={visibility}
+          onChange={(e) => setVisibility(e.target.value as ApiVisibility)}
+          className="w-full p-3 rounded-xl border border-stone-200 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-300 bg-white"
+        >
+          {VISIBILITY_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -89,15 +138,25 @@ export const CreatePinPanel: React.FC<CreatePinPanelProps> = ({
       >
         <button
           onClick={onCancel}
-          className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-stone-600 hover:bg-stone-100 transition-all duration-150 hover:scale-[1.02] active:scale-[0.98]"
+          disabled={saving}
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-stone-600 hover:bg-stone-100 transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
         >
           Cancel
         </button>
         <button
-          onClick={() => onSave({ type, note, anchorText: selectedText })}
-          className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-teal-700 text-white hover:bg-teal-800 transition-all duration-150 hover:scale-[1.02] hover:premium-shadow active:scale-[0.98]"
+          onClick={() =>
+            onSave({
+              title: title.trim() || selectedText.slice(0, 80),
+              type,
+              note,
+              anchorText: selectedText,
+              visibility,
+            })
+          }
+          disabled={saving || (!note.trim() && !title.trim())}
+          className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-teal-700 text-white hover:bg-teal-800 transition-all duration-150 hover:scale-[1.02] hover:premium-shadow active:scale-[0.98] disabled:opacity-40"
         >
-          Save Pin
+          {saving ? 'Saving…' : 'Save Pin'}
         </button>
       </motion.div>
     </motion.div>

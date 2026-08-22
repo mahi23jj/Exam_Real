@@ -31,6 +31,7 @@ class DocumentRead(BaseModel):
     status: JobStatus
     metadata_json: Dict[str, Any]
     is_active: bool
+    version: int = 1
     created_at: datetime
     updated_at: datetime
 

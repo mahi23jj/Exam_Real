@@ -6,8 +6,16 @@ export type FileType = 'PDF' | 'PPT' | 'PPTX' | 'IMAGE';
 
 export const PENDING_STATUSES: JobStatus[] = ['PENDING', 'PROCESSING', 'FAILED'];
 
-export const ACCEPTED_UPLOAD_EXTENSIONS = ['.pdf', '.ppt', '.pptx', '.png', '.jpg', '.jpeg', '.webp'];
+export const ACCEPTED_UPLOAD_EXTENSIONS = ['.pdf'];
+export const ACCEPTED_UPLOAD_ACCEPT = '.pdf,application/pdf';
+export const PDF_ONLY_UPLOAD_MESSAGE =
+  'Only PDF documents are supported right now. Please convert your presentation to PDF before uploading.';
 export const MAX_UPLOAD_FILES = 10;
+
+export function isPdfFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return file.type === 'application/pdf' || name.endsWith('.pdf');
+}
 
 export interface CourseDocument {
   id: string;
@@ -22,6 +30,7 @@ export interface CourseDocument {
   status?: JobStatus | null;
   metadata_json?: Record<string, unknown> | null;
   is_active?: boolean | null;
+  version?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
 }

@@ -14,14 +14,15 @@ import type {
   PublicQuestion,
   ExamQuestion,
   NotesChipTab,
-  TextSelection,
+  DocumentSelection,
 } from '../../types/workspace';
+import type { ApiVisibility } from '../../services/socialService';
 
 interface ContextPanelProps {
   mode: ContextPanelMode;
   notesTab: NotesChipTab;
   activeDocument: CourseDocument | null;
-  selection: TextSelection | null;
+  selection: DocumentSelection | null;
   practiceQuestion: ExamQuestion | null;
   practiceSelectedIndex: number | null;
   practiceSubmitted: boolean;
@@ -33,8 +34,21 @@ interface ContextPanelProps {
   onLocatePin: (pin: KnowledgePin) => void;
   onLocateQuestion: (question: PublicQuestion) => void;
   onSetMode: (mode: ContextPanelMode) => void;
-  onSavePin: (data: { type: KnowledgePin['type']; note: string; anchorText: string }) => void;
-  onPostQuestion: (data: { anchorText: string; content: string }) => void;
+  onSavePin: (data: {
+    title: string;
+    type: KnowledgePin['type'];
+    note: string;
+    anchorText: string;
+    visibility: ApiVisibility;
+  }) => void;
+  onPostQuestion: (data: {
+    title: string;
+    anchorText: string;
+    content: string;
+    visibility: ApiVisibility;
+  }) => void;
+  savingPin?: boolean;
+  savingQuestion?: boolean;
 }
 
 const ContextPanel: React.FC<ContextPanelProps> = ({
@@ -55,6 +69,8 @@ const ContextPanel: React.FC<ContextPanelProps> = ({
   onSetMode,
   onSavePin,
   onPostQuestion,
+  savingPin = false,
+  savingQuestion = false,
 }) => {
   const title = getPanelTitle(mode, activeDocument);
 
@@ -86,27 +102,29 @@ const ContextPanel: React.FC<ContextPanelProps> = ({
             )}
             {mode === 'create_pin' && selection && (
               <CreatePinPanel
-                selectedText={selection.text}
+                selectedText={selection.selectedText}
                 onCancel={() => onSetMode('notes_context')}
                 onSave={(data) => {
                   onSavePin(data);
                   onSetMode('notes_context');
                 }}
+                saving={savingPin}
               />
             )}
             {mode === 'create_question' && selection && (
               <CreateQuestionPanel
-                selectedText={selection.text}
+                selectedText={selection.selectedText}
                 onCancel={() => onSetMode('notes_context')}
                 onPost={(data) => {
                   onPostQuestion(data);
                   onSetMode('notes_context');
                 }}
+                saving={savingQuestion}
               />
             )}
             {mode === 'ai_tutor' && selection && (
               <AITutorChat
-                contextText={selection.text}
+                contextText={selection.selectedText}
                 onBack={() => onSetMode('notes_context')}
               />
             )}

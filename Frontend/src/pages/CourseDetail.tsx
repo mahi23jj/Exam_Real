@@ -12,7 +12,9 @@ import { getCourse, type CourseRead } from '../services/courseService';
 import {
   fetchCourseDocuments,
   uploadDocuments,
-  ACCEPTED_UPLOAD_EXTENSIONS,
+  ACCEPTED_UPLOAD_ACCEPT,
+  PDF_ONLY_UPLOAD_MESSAGE,
+  isPdfFile,
   MAX_UPLOAD_FILES,
   type CourseDocument,
   type DocumentType,
@@ -70,6 +72,11 @@ const CourseDetail: React.FC = () => {
   const handleFiles = async (fileList: FileList | null) => {
     if (!courseId || !fileList || fileList.length === 0) return;
     const files = Array.from(fileList).slice(0, MAX_UPLOAD_FILES);
+    const invalid = files.filter((f) => !isPdfFile(f));
+    if (invalid.length > 0) {
+      toast.error(PDF_ONLY_UPLOAD_MESSAGE);
+      return;
+    }
 
     setUploading(true);
     try {
@@ -131,7 +138,7 @@ const CourseDetail: React.FC = () => {
               ref={fileInputRef}
               type="file"
               multiple
-              accept={ACCEPTED_UPLOAD_EXTENSIONS.join(',')}
+              accept={ACCEPTED_UPLOAD_ACCEPT}
               className="hidden"
               onChange={(e) => void handleFiles(e.target.files)}
             />

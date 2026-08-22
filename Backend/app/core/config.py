@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     CLAUDE_BASE_URL: str = "https://api.anthropic.com"
 
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
 
     # Upload Rules
     MAX_UPLOAD_SIZE_MB: int = 25

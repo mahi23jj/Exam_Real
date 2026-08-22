@@ -2,6 +2,8 @@ import React from 'react';
 import PDFViewer from './PDFViewer';
 import PastExamViewer from './PastExamViewer';
 import SplitLearningCenter from './SplitLearningCenter';
+import PdfJsViewer from './PdfJsViewer';
+import UnsupportedDocument from './UnsupportedDocument';
 import type {
   CourseDocument,
   NoteDocument,
@@ -9,8 +11,8 @@ import type {
   ExamHistoryItem,
   LocateTarget,
   SplitViewMode,
+  DocumentSelection,
 } from '../../types/workspace';
-import type { TextSelection } from '../../types/workspace';
 
 interface DocumentViewerProps {
   document: CourseDocument | null;
@@ -23,12 +25,16 @@ interface DocumentViewerProps {
   practiceQuestion: ExamQuestion | null;
   practiceSelectedIndex: number | null;
   examHistory: ExamHistoryItem[];
-  onTextSelect: (selection: TextSelection) => void;
+  onTextSelect: (selection: DocumentSelection) => void;
   onPinClick: (pinId: string) => void;
   onQuestionClick: (questionId: string) => void;
   onPracticeQuestion: (questionId: string) => void;
   onSetSplitMode: (mode: SplitViewMode) => void;
   onCloseSplit: () => void;
+}
+
+function isPdfDocument(document: CourseDocument): boolean {
+  return document.fileType === 'PDF' || Boolean(document.fileUrl?.toLowerCase().includes('.pdf'));
 }
 
 const DocumentViewer: React.FC<DocumentViewerProps> = ({
@@ -84,6 +90,25 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
           </p>
         </div>
       </div>
+    );
+  }
+
+  if (document.fileUrl) {
+    if (!isPdfDocument(document)) {
+      return <UnsupportedDocument fileType={document.fileType} name={document.name} />;
+    }
+
+    return (
+      <PdfJsViewer
+        url={document.fileUrl}
+        documentId={document.id}
+        documentVersion={document.documentVersion ?? 1}
+        pins={document.type === 'note' ? document.pins : []}
+        questions={document.type === 'note' ? document.questions : []}
+        onTextSelect={onTextSelect}
+        onPinClick={onPinClick}
+        onQuestionClick={onQuestionClick}
+      />
     );
   }
 

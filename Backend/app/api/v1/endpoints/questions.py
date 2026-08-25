@@ -10,6 +10,7 @@ from app.schemas.question import (
     QuestionInitialRead,
     AnswerSubmitRequest,
     AnswerFeedbackResponse,
+    AnswerHistoryItem,
     ExplainDifferentlyRequest,
     FollowUpQuestionRequest,
     FollowUpQuestionResponse,
@@ -33,6 +34,37 @@ async def get_exam_questions(
     """Retrieves all questions and choices for an exam prior to student submission."""
     service = QuestionService(db)
     return await service.get_exam_questions(exam_id)
+
+
+@router.get(
+    "/documents/{document_id}/questions",
+    response_model=List[QuestionInitialRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get all questions for a past-exam document (without revealing correct choices)"
+)
+async def get_document_questions(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+) -> List[QuestionInitialRead]:
+    """Resolves the Exam attached to the document and returns its questions with PDF locations."""
+    service = QuestionService(db)
+    return await service.get_document_questions(document_id)
+
+
+@router.get(
+    "/documents/{document_id}/answers/history",
+    response_model=List[AnswerHistoryItem],
+    status_code=status.HTTP_200_OK,
+    summary="Get the current student's practice attempt history for a past-exam document"
+)
+async def get_document_answer_history(
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> List[AnswerHistoryItem]:
+    """Returns only the requesting student's previous answers for this document."""
+    service = QuestionService(db)
+    return await service.get_answer_history(document_id, current_user)
 
 
 @router.post(

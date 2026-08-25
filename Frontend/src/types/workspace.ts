@@ -33,6 +33,7 @@ export type ContextPanelMode =
   | 'ai_tutor'
   | 'practice'
   | 'answered'
+  | 'answer_history'
   | 'create_pin'
   | 'create_question';
 
@@ -90,21 +91,46 @@ export interface PublicQuestion {
   isSavedByMe?: boolean;
 }
 
+/** A course note block returned by the AI explanation as relevant material. */
+export interface RelevantNote {
+  contentBlockId: string;
+  documentId: string;
+  documentTitle: string;
+  pageNumber: number;
+  contentSnippet: string;
+  similarityScore: number;
+}
+
+/** Result of submitting a practice answer to the backend. */
+export interface PracticeFeedback {
+  studentAnswerId: string;
+  isCorrect: boolean;
+  correctChoiceLabel: string;
+  correctChoiceText: string;
+  aiExplanation: string;
+  relevantNotes: RelevantNote[];
+}
+
 export interface ExamQuestion {
   id: string;
   number: number;
   text: string;
   choices: string[];
-  correctIndex: number;
-  explanation: string;
-  confidence: ConfidenceLevel;
+  /** Backend choice ids — required for real answer submission. */
+  choiceIds?: string[];
+  /** Only known after submission (or in mock data). */
+  correctIndex?: number;
+  explanation?: string;
+  confidence?: ConfidenceLevel;
+  pageNumber?: number | null;
+  location?: Record<string, unknown> | null;
   noteReference?: {
     documentId: string;
     sectionId: string;
     highlightText: string;
     title: string;
   };
-  intelligence: {
+  intelligence?: {
     topic: string;
     mostAskedCount: number;
     yearsAppeared: number[];
@@ -173,6 +199,7 @@ export interface PracticeState {
   questionId: string;
   selectedIndex: number | null;
   submitted: boolean;
+  feedback?: PracticeFeedback | null;
 }
 
 export interface LocateTarget {
@@ -186,6 +213,12 @@ export interface ExamHistoryItem {
   questionText: string;
   answeredAt: string;
   wasCorrect: boolean;
+  selectedLabel?: string | null;
+  selectedText?: string | null;
+  correctLabel?: string | null;
+  correctText?: string | null;
+  aiExplanation?: string | null;
+  studentAnswerId?: string;
 }
 
 export interface ChatMessage {

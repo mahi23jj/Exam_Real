@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, X, ChevronRight } from 'lucide-react';
+import { Check, X, ChevronRight, BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ConfidenceBadge from './ConfidenceBadge';
 import QuestionIntelligenceCard from './QuestionIntelligenceCard';
@@ -7,23 +7,28 @@ import KnowledgePinCard from './KnowledgePinCard';
 import QuestionDiscussion from './QuestionDiscussion';
 import PanelChipNav from './PanelChipNav';
 import FollowUpChat from './FollowUpChat';
-import type { ExamQuestion } from '../../types/workspace';
+import type { ExamQuestion, PracticeFeedback, RelevantNote } from '../../types/workspace';
 
 interface AnswerCardProps {
   question: ExamQuestion;
   selectedIndex: number;
+  /** Real backend feedback (correct answer, AI explanation, relevant notes). */
+  feedback?: PracticeFeedback | null;
   onOpenNote: () => void;
+  onGoToNote?: (note: RelevantNote) => void;
   onOpenChatHistory: () => void;
 }
 
 const AnswerCard: React.FC<AnswerCardProps> = ({
   question,
   selectedIndex,
+  feedback,
   onOpenNote,
+  onGoToNote,
   onOpenChatHistory,
 }) => {
   const [socialTab, setSocialTab] = useState<'pins' | 'questions'>('pins');
-  const isCorrect = selectedIndex === question.correctIndex;
+  const isCorrect = feedback ? feedback.isCorrect : selectedIndex === question.correctIndex;
 
   return (
     <motion.div
@@ -54,25 +59,68 @@ const AnswerCard: React.FC<AnswerCardProps> = ({
             <div className="flex items-start gap-2">
               <span className="text-stone-500 flex-shrink-0">Correct:</span>
               <span className="font-medium text-emerald-700">
-                {String.fromCharCode(65 + question.correctIndex)}. {question.choices[question.correctIndex]}
+                {feedback
+                  ? `${feedback.correctChoiceLabel}. ${feedback.correctChoiceText}`
+                  : `${String.fromCharCode(65 + question.correctIndex!)}. ${question.choices[question.correctIndex!]}`}
               </span>
             </div>
           )}
         </div>
       </div>
 
-      <div>
-        <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">Explanation</h4>
-        <p className="text-[15px] text-stone-700 leading-relaxed">{question.explanation}</p>
-      </div>
+      {(feedback?.aiExplanation || question.explanation) && (
+        <div>
+          <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">
+            {feedback ? 'AI Explanation' : 'Explanation'}
+          </h4>
+          <p className="text-[15px] text-stone-700 leading-relaxed">
+            {feedback?.aiExplanation ?? question.explanation}
+          </p>
+        </div>
+      )}
 
-      <ConfidenceBadge
-        level={question.confidence}
-        noteTitle={question.noteReference?.title}
-        onOpenNote={question.confidence !== 'low' ? onOpenNote : undefined}
-      />
+      {feedback && feedback.relevantNotes.length > 0 && (
+        <div>
+          <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">
+            Relevant Notes
+          </h4>
+          <div className="space-y-2">
+            {feedback.relevantNotes.map((note) => (
+              <button
+                key={note.contentBlockId}
+                onClick={() => onGoToNote?.(note)}
+                className="w-full flex items-start justify-between gap-3 p-3 rounded-xl border border-stone-100 bg-white hover:bg-teal-50/40 hover:border-teal-200/60 transition-all text-left group"
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-stone-700 truncate group-hover:text-teal-800">
+                    {note.documentTitle}
+                  </div>
+                  <p className="text-xs text-stone-500 leading-relaxed line-clamp-2 mt-1">
+                    {note.contentSnippet}
+                  </p>
+                  <div className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1.5">
+                    Page {note.pageNumber}
+                  </div>
+                </div>
+                <span className="flex-shrink-0 flex items-center gap-1 text-xs font-bold text-teal-700">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  Go to Note
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
-      <QuestionIntelligenceCard intelligence={question.intelligence} />
+      {!feedback && question.confidence && (
+        <ConfidenceBadge
+          level={question.confidence}
+          noteTitle={question.noteReference?.title}
+          onOpenNote={question.confidence !== 'low' ? onOpenNote : undefined}
+        />
+      )}
+
+      {!feedback && <QuestionIntelligenceCard intelligence={question.intelligence} />}
 
       {(question.pins.length > 0 || question.publicQuestions.length > 0) && (
         <div>

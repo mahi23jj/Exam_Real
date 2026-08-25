@@ -21,6 +21,7 @@ from app.schemas.question import (
     QuestionInitialRead,
     AnswerSubmitRequest,
     AnswerFeedbackResponse,
+    AnswerHistoryItem,
     RelevantNoteBlock,
     SimilarQuestionResponse,
 )
@@ -40,21 +41,75 @@ class QuestionService:
         self.cache_service = ExplanationCacheService()
         self.llm = get_llm_provider()
 
+    def _map_question_read(self, q: PastExamQuestion) -> QuestionInitialRead:
+        """Maps a PastExamQuestion to its read schema, preserving PDF location data."""
+        choice_reads = [ChoiceInitialRead.model_validate(c) for c in q.choices]
+        return QuestionInitialRead(
+            id=q.id,
+            exam_id=q.exam_id,
+            question_number=q.question_number,
+            question_text=q.question_text,
+            question_image_url=q.question_image_url,
+            page_number=q.page_number,
+            location_json=q.location_json or {},
+            subtopic=q.subtopic,
+            difficulty=q.difficulty.value if q.difficulty else None,
+            question_type=q.question_type.value if q.question_type else None,
+            choices=choice_reads
+        )
+
     async def get_exam_questions(self, exam_id: uuid.UUID) -> List[QuestionInitialRead]:
         """Retrieves questions for an exam with choices (without revealing correct answers)."""
         questions = await self.question_repo.list_exam_questions(exam_id)
-        result = []
-        for q in questions:
-            choice_reads = [ChoiceInitialRead.model_validate(c) for c in q.choices]
-            q_read = QuestionInitialRead(
-                id=q.id,
-                exam_id=q.exam_id,
-                question_number=q.question_number,
-                question_text=q.question_text,
-                question_image_url=q.question_image_url,
-                choices=choice_reads
+        return [self._map_question_read(q) for q in questions]
+
+    async def get_document_questions(self, document_id: uuid.UUID) -> List[QuestionInitialRead]:
+        """Retrieves questions for the past exam attached to a PAST_EXAM document."""
+        exam = (
+            await self.session.execute(
+                select(Exam).where(Exam.document_id == document_id)
             )
-            result.append(q_read)
+        ).scalar_one_or_none()
+        if not exam:
+            raise HTTPException(
+                status_code=404,
+                detail="No past exam found for this document (or it is still processing)."
+            )
+        questions = await self.question_repo.list_document_questions(document_id)
+        return [self._map_question_read(q) for q in questions]
+
+    async def get_answer_history(
+        self,
+        document_id: uuid.UUID,
+        current_user: User
+    ) -> List[AnswerHistoryItem]:
+        """Returns the current student's practice attempts for a past-exam document."""
+        answers = await self.answer_repo.list_for_document(current_user.id, document_id)
+        result: List[AnswerHistoryItem] = []
+        for ans in answers:
+            question = ans.question
+            if not question:
+                continue
+            correct_choice = next(
+                (c for c in question.choices if c.is_correct),
+                None
+            )
+            result.append(
+                AnswerHistoryItem(
+                    answer_id=ans.id,
+                    question_id=question.id,
+                    question_number=question.question_number,
+                    question_text=question.question_text,
+                    selected_choice_label=ans.selected_choice.choice_label if ans.selected_choice else None,
+                    selected_choice_text=ans.selected_choice.choice_text if ans.selected_choice else None,
+                    is_correct=ans.is_correct,
+                    correct_choice_label=correct_choice.choice_label if correct_choice else None,
+                    correct_choice_text=correct_choice.choice_text if correct_choice else None,
+                    ai_explanation=ans.ai_generated_explanation,
+                    confidence=ans.confidence.value if ans.confidence else None,
+                    answered_at=ans.created_at
+                )
+            )
         return result
 
     async def submit_answer(

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict, Field
 from app.db.models.student_answer import ConfidenceLevel
@@ -26,6 +27,22 @@ class QuestionInitialRead(BaseModel):
     choices: List[ChoiceInitialRead]
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class AnswerHistoryItem(BaseModel):
+    """A single past practice attempt by the requesting student."""
+    answer_id: uuid.UUID
+    question_id: uuid.UUID
+    question_number: int
+    question_text: str
+    selected_choice_label: Optional[str] = None
+    selected_choice_text: Optional[str] = None
+    is_correct: Optional[bool] = None
+    correct_choice_label: Optional[str] = None
+    correct_choice_text: Optional[str] = None
+    ai_explanation: Optional[str] = None
+    confidence: Optional[str] = None
+    answered_at: datetime
 
 
 class AnswerSubmitRequest(BaseModel):

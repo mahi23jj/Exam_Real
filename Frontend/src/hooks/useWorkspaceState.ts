@@ -6,6 +6,7 @@ import type {
   SplitViewMode,
   DocumentSelection,
   PracticeState,
+  PracticeFeedback,
   KnowledgePin,
   PublicQuestion,
   CourseDocument,
@@ -45,7 +46,7 @@ type WorkspaceAction =
   | { type: 'OPEN_PUBLIC_QUESTION'; questionId: string }
   | { type: 'START_PRACTICE'; questionId: string }
   | { type: 'SELECT_ANSWER'; index: number }
-  | { type: 'SUBMIT_ANSWER'; historyItem: ExamHistoryItem }
+  | { type: 'SUBMIT_ANSWER'; historyItem: ExamHistoryItem; feedback?: PracticeFeedback | null }
   | { type: 'OPEN_SPLIT_LEARNING' }
   | { type: 'SET_SPLIT_MODE'; mode: SplitViewMode }
   | { type: 'CLOSE_SPLIT' }
@@ -148,10 +149,10 @@ function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): Works
       if (!state.practice) return state;
       return {
         ...state,
-        practice: { ...state.practice, submitted: true },
+        practice: { ...state.practice, submitted: true, feedback: action.feedback ?? null },
         contextMode: 'answered',
         phase: 'submitted',
-        examHistory: [action.historyItem, ...state.examHistory].slice(0, 5),
+        examHistory: [action.historyItem, ...state.examHistory].slice(0, 20),
       };
     case 'OPEN_SPLIT_LEARNING':
       return { ...state, splitMode: 'split', phase: 'split_learning', contextOpen: true };
@@ -289,9 +290,12 @@ export function useWorkspaceState(
     dispatch({ type: 'SELECT_ANSWER', index });
   }, []);
 
-  const submitAnswer = useCallback((historyItem: ExamHistoryItem) => {
-    dispatch({ type: 'SUBMIT_ANSWER', historyItem });
-  }, []);
+  const submitAnswer = useCallback(
+    (historyItem: ExamHistoryItem, feedback?: PracticeFeedback | null) => {
+      dispatch({ type: 'SUBMIT_ANSWER', historyItem, feedback });
+    },
+    [],
+  );
 
   const openSplitLearning = useCallback(() => {
     dispatch({ type: 'OPEN_SPLIT_LEARNING' });

@@ -7,6 +7,15 @@ import { Loader2, X } from 'lucide-react';
 import { getCourse } from '../services/courseService';
 import { fetchCourseDocuments } from '../services/documentService';
 import {
+  fetchDocumentQuestions,
+  fetchDocumentAnswerHistory,
+  submitPracticeAnswer,
+  mapApiQuestionToWorkspace,
+  mapApiFeedbackToPracticeFeedback,
+  mapApiHistoryToExamHistoryItem,
+  type ApiConfidenceLevel,
+} from '../services/examService';
+import {
   createPin,
   createLearningQuestion,
   listPins,
@@ -18,10 +27,13 @@ import { useWorkspaceState } from '../hooks/useWorkspaceState';
 import type {
   PastExamDocument,
   ExamQuestion,
+  ExamHistoryItem,
   NoteDocument,
   KnowledgePin,
   PublicQuestion,
   ChatConversation,
+  RelevantNote,
+  PracticeFeedback,
 } from '../types/workspace';
 
 import CourseHeader from '../components/workspace/CourseHeader';
@@ -111,6 +123,9 @@ const CourseWorkspace: React.FC = () => {
   >({});
   const [savingPin, setSavingPin] = useState(false);
   const [savingQuestion, setSavingQuestion] = useState(false);
+  const [submittingAnswer, setSubmittingAnswer] = useState(false);
+  const [examQuestionsByDoc, setExamQuestionsByDoc] = useState<Record<string, ExamQuestion[]>>({});
+  const [fetchedHistory, setFetchedHistory] = useState<ExamHistoryItem[]>([]);
 
   const loadDocumentAnnotations = useCallback(async (documentId: string) => {
     try {
@@ -138,6 +153,40 @@ const CourseWorkspace: React.FC = () => {
     void loadDocumentAnnotations(state.activeDocumentId);
   }, [state.activeDocumentId, loadDocumentAnnotations]);
 
+  // ── Past Exams: load questions & answer history when a past exam is opened ──
+  useEffect(() => {
+    if (!state.activeDocument || state.activeDocument.type !== 'past_exam') return;
+    const documentId = state.activeDocument.id;
+    let cancelled = false;
+
+    const loadPastExamData = async () => {
+      try {
+        const apiQuestions = await fetchDocumentQuestions(documentId);
+        if (!cancelled) {
+          setExamQuestionsByDoc((prev) => ({
+            ...prev,
+            [documentId]: apiQuestions.map(mapApiQuestionToWorkspace),
+          }));
+        }
+      } catch {
+        /* questions stay empty; viewer shows intro only */
+      }
+      try {
+        const apiHistory = await fetchDocumentAnswerHistory(documentId);
+        if (!cancelled) {
+          setFetchedHistory(apiHistory.map(mapApiHistoryToExamHistoryItem));
+        }
+      } catch {
+        /* history stays empty */
+      }
+    };
+
+    void loadPastExamData();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.activeDocumentId, state.activeDocument?.type]);
+
   const activeNoteDoc = useMemo(() => {
     if (state.activeDocument?.type !== 'note') return null;
     const base = state.activeDocument as NoteDocument;
@@ -151,14 +200,24 @@ const CourseWorkspace: React.FC = () => {
 
   const activeDocument = useMemo(() => {
     if (state.activeDocument?.type === 'note' && activeNoteDoc) return activeNoteDoc;
+    if (
+      state.activeDocument?.type === 'past_exam' &&
+      examQuestionsByDoc[state.activeDocument.id]
+    ) {
+      const base = state.activeDocument as PastExamDocument;
+      return { ...base, questions: examQuestionsByDoc[base.id] };
+    }
     return state.activeDocument;
-  }, [state.activeDocument, activeNoteDoc]);
+  }, [state.activeDocument, activeNoteDoc, examQuestionsByDoc]);
 
   const practiceQuestion: ExamQuestion | null = useMemo(() => {
     if (!state.practice || state.activeDocument?.type !== 'past_exam') return null;
     const exam = state.activeDocument as PastExamDocument;
     return exam.questions.find((q) => q.id === state.practice!.questionId) ?? null;
   }, [state.practice, state.activeDocument]);
+
+  // Prefer server-fetched history; newly submitted items are already prepended to fetchedHistory.
+  const displayHistory = fetchedHistory.length > 0 ? fetchedHistory : state.examHistory;
 
   const highlightSectionId = useMemo(() => {
     if (state.splitMode !== 'question_only' && practiceQuestion?.noteReference) {
@@ -300,15 +359,54 @@ const CourseWorkspace: React.FC = () => {
     openSplitLearning();
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async (confidence: ApiConfidenceLevel) => {
     if (!state.practice || state.practice.selectedIndex === null || !practiceQuestion) return;
-    submitAnswer({
-      questionId: practiceQuestion.id,
-      questionNumber: practiceQuestion.number,
-      questionText: practiceQuestion.text,
-      answeredAt: 'Just now',
-      wasCorrect: state.practice.selectedIndex === practiceQuestion.correctIndex,
-    });
+    const selectedIndex = state.practice.selectedIndex;
+    const choiceId = practiceQuestion.choiceIds?.[selectedIndex];
+    setSubmittingAnswer(true);
+    try {
+      // Real submission when backend choice ids are available.
+      let feedback: PracticeFeedback | null = null;
+      if (choiceId) {
+        feedback = mapApiFeedbackToPracticeFeedback(
+          await submitPracticeAnswer(practiceQuestion.id, {
+            selected_choice_id: choiceId,
+            confidence,
+          }),
+        );
+      }
+
+      const historyItem: ExamHistoryItem = {
+        questionId: practiceQuestion.id,
+        questionNumber: practiceQuestion.number,
+        questionText: practiceQuestion.text,
+        answeredAt: new Date().toLocaleString(),
+        wasCorrect: feedback ? feedback.isCorrect : selectedIndex === practiceQuestion.correctIndex,
+        selectedLabel: String.fromCharCode(65 + selectedIndex),
+        selectedText: practiceQuestion.choices[selectedIndex],
+        correctLabel: feedback?.correctChoiceLabel ?? null,
+        correctText: feedback?.correctChoiceText ?? null,
+        aiExplanation: feedback?.aiExplanation ?? null,
+        studentAnswerId: feedback?.studentAnswerId,
+      };
+
+      submitAnswer(historyItem, feedback);
+      setFetchedHistory((prev) => [historyItem, ...prev]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit answer');
+    } finally {
+      setSubmittingAnswer(false);
+    }
+  };
+
+  const handleGoToNote = (note: RelevantNote) => {
+    const doc = courseData?.documents[note.documentId];
+    if (!doc) {
+      toast.error('That note is not available in this workspace');
+      return;
+    }
+    openDocument(note.documentId, doc);
+    locateInDocument({ anchorText: note.contentSnippet.slice(0, 80), type: 'pin' });
   };
 
   const handleCloseSplit = () => {
@@ -345,8 +443,12 @@ const CourseWorkspace: React.FC = () => {
         practiceSubmitted={state.practice?.submitted ?? false}
         onNotesTabChange={(tab) => dispatch({ type: 'SET_NOTES_TAB', tab })}
         onSelectAnswer={selectAnswer}
-        onSubmitAnswer={handleSubmit}
+        onSubmitAnswer={(confidence) => void handleSubmit(confidence)}
+        practiceFeedback={state.practice?.feedback ?? null}
+        practiceSubmitting={submittingAnswer}
+        examHistory={displayHistory}
         onOpenNote={handleOpenNote}
+        onGoToNote={handleGoToNote}
         onOpenChatHistory={() => dispatch({ type: 'SET_CHAT_HISTORY_OPEN', open: true })}
         onLocatePin={handleLocatePin}
         onLocateQuestion={handleLocateQuestion}
@@ -384,7 +486,7 @@ const CourseWorkspace: React.FC = () => {
       splitMode={state.splitMode}
       practiceQuestion={practiceQuestion}
       practiceSelectedIndex={state.practice?.selectedIndex ?? null}
-      examHistory={state.examHistory}
+      examHistory={displayHistory}
       onTextSelect={selectText}
       onPinClick={() => {}}
       onQuestionClick={() => {}}

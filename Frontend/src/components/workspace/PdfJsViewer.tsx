@@ -6,12 +6,17 @@ import { Loader2 } from 'lucide-react';
 
 import { buildDocumentSelection } from '../../utils/pdfSelection';
 import type { DocumentSelection } from '../../types/documentSelection';
-import type { KnowledgePin, PublicQuestion } from '../../types/workspace';
+import type { KnowledgePin, PublicQuestion, ExamQuestion } from '../../types/workspace';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString();
+
+interface QuestionLocationJson {
+  page_dimensions?: { width?: number; height?: number };
+  regions?: { type?: string; bbox?: { x: number; y: number; width: number; height: number } }[];
+}
 
 interface PdfJsViewerProps {
   url: string;
@@ -19,20 +24,28 @@ interface PdfJsViewerProps {
   documentVersion: number;
   pins?: KnowledgePin[];
   questions?: PublicQuestion[];
+  /** Past-exam questions to overlay onto their stored PDF locations. */
+  examQuestions?: ExamQuestion[];
+  activeQuestionId?: string | null;
   onTextSelect: (selection: DocumentSelection) => void;
   onPinClick?: (pinId: string) => void;
   onQuestionClick?: (questionId: string) => void;
+  onPracticeQuestion?: (questionId: string) => void;
 }
 
 const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
   url,
   documentId,
   documentVersion,
+  examQuestions,
+  activeQuestionId,
   onTextSelect,
+  onPracticeQuestion,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageElementsRef = useRef<Map<number, HTMLElement>>(new Map());
   const pageViewportsRef = useRef<Map<number, pdfjsLib.PageViewport>>(new Map());
+  const pageScalesRef = useRef<Map<number, number>>(new Map());
   const pageTextLengthsRef = useRef<Map<number, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +54,7 @@ const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
     let cancelled = false;
     pageElementsRef.current.clear();
     pageViewportsRef.current.clear();
+    pageScalesRef.current.clear();
     pageTextLengthsRef.current.clear();
 
     const renderPdf = async () => {
@@ -67,6 +81,7 @@ const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
           const viewport = page.getViewport({ scale });
 
           pageViewportsRef.current.set(pageNum, viewport);
+          pageScalesRef.current.set(pageNum, scale);
 
           const pageWrapper = document.createElement('div');
           pageWrapper.className = 'pdf-page-wrapper relative mx-auto mb-6 bg-white premium-shadow rounded-lg overflow-hidden';
@@ -109,6 +124,7 @@ const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
         }
 
         host.appendChild(fragment);
+        injectQuestionOverlays(host);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load PDF');
@@ -122,7 +138,53 @@ const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
+
+  /** Position past-exam question overlays using the persisted location_json bounding boxes. */
+  const injectQuestionOverlays = (host: HTMLDivElement) => {
+    if (!examQuestions || examQuestions.length === 0 || !onPracticeQuestion) return;
+
+    for (const question of examQuestions) {
+      if (!question.pageNumber) continue;
+      const wrapper = host.querySelector<HTMLElement>(
+        `.pdf-page-wrapper[data-pdf-page="${question.pageNumber}"]`,
+      );
+      const location = question.location as QuestionLocationJson | null;
+      const bbox = location?.regions?.find((r) => r.bbox)?.bbox;
+      if (!wrapper || !bbox) continue;
+
+      const scale = pageScalesRef.current.get(question.pageNumber) ?? 1;
+
+      const overlay = document.createElement('div');
+      overlay.className =
+        'exam-question-overlay group absolute rounded-md border-2 border-transparent hover:border-teal-400/70 hover:bg-teal-100/20 transition-colors cursor-pointer z-10';
+      overlay.style.left = `${bbox.x * scale - 4}px`;
+      overlay.style.top = `${bbox.y * scale - 4}px`;
+      overlay.style.width = `${Math.max(bbox.width * scale + 8, 32)}px`;
+      overlay.style.height = `${Math.max(bbox.height * scale + 8, 24)}px`;
+      overlay.title = `Question ${question.number}`;
+      if (activeQuestionId === question.id) {
+        overlay.classList.add('border-teal-500', 'bg-teal-100/30');
+      }
+      overlay.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onPracticeQuestion(question.id);
+      });
+
+      const chip = document.createElement('button');
+      chip.className =
+        'absolute left-1/2 top-full -translate-x-1/2 mt-1 px-3 py-1.5 rounded-lg bg-teal-700 text-white text-[11px] font-bold opacity-0 group-hover:opacity-100 transition-opacity premium-shadow whitespace-nowrap';
+      chip.textContent = `Practice Q${question.number}`;
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onPracticeQuestion(question.id);
+      });
+      overlay.appendChild(chip);
+
+      wrapper.appendChild(overlay);
+    }
+  };
 
   const handleMouseUp = useCallback(() => {
     const sel = window.getSelection();

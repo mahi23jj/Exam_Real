@@ -30,7 +30,7 @@ class PastExamQuestionRepository(BaseRepository[PastExamQuestion]):
             .order_by(PastExamQuestion.question_number.asc())
         )
         result = await self.session.execute(statement)
-        return list(result.scalars().all()
+        return list(result.scalars().all())
 
     async def list_document_questions(self, document_id: uuid.UUID) -> List[PastExamQuestion]:
         """Lists questions for the past exam attached to a document (Document → Exam → Questions)."""
@@ -82,4 +82,4 @@ class StudentAnswerRepository(BaseRepository[StudentAnswer]):
             .order_by(StudentAnswer.created_at.desc())
         )
         result = await self.session.execute(statement)
-        return list(result.scalars().all()
+        return list(result.scalars().all())

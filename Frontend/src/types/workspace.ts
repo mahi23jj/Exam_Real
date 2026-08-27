@@ -52,6 +52,7 @@ export interface Comment {
   author: Author;
   content: string;
   likes: number;
+  isLikedByMe?: boolean;
   createdAt: string;
   replies?: Comment[];
 }
@@ -99,7 +100,11 @@ export interface RelevantNote {
   pageNumber: number;
   contentSnippet: string;
   similarityScore: number;
+  location?: Record<string, unknown> | null;
 }
+
+/** Whether the AI explanation came from course notes or general model knowledge. */
+export type ExplanationSource = 'COURSE_NOTES' | 'GENERAL_KNOWLEDGE';
 
 /** Result of submitting a practice answer to the backend. */
 export interface PracticeFeedback {
@@ -108,6 +113,7 @@ export interface PracticeFeedback {
   correctChoiceLabel: string;
   correctChoiceText: string;
   aiExplanation: string;
+  explanationSource: ExplanationSource;
   relevantNotes: RelevantNote[];
 }
 

@@ -7,6 +7,7 @@ import KnowledgePinCard from './KnowledgePinCard';
 import QuestionDiscussion from './QuestionDiscussion';
 import PanelChipNav from './PanelChipNav';
 import FollowUpChat from './FollowUpChat';
+import MarkdownRenderer from '../ui/MarkdownRenderer';
 import type { ExamQuestion, PracticeFeedback, RelevantNote } from '../../types/workspace';
 
 interface AnswerCardProps {
@@ -69,17 +70,42 @@ const AnswerCard: React.FC<AnswerCardProps> = ({
       </div>
 
       {(feedback?.aiExplanation || question.explanation) && (
-        <div>
-          <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">
-            {feedback ? 'AI Explanation' : 'Explanation'}
-          </h4>
-          <p className="text-[15px] text-stone-700 leading-relaxed">
-            {feedback?.aiExplanation ?? question.explanation}
-          </p>
+        <div className="rounded-xl border border-stone-100 bg-gradient-to-b from-teal-50/30 to-white p-4">
+          {feedback && (
+            <>
+              {feedback.explanationSource === 'COURSE_NOTES' ? (
+                <div className="flex items-center gap-1.5 mb-3">
+                  <span className="text-base">📚</span>
+                  <span className="text-xs font-bold text-teal-700 uppercase tracking-widest">
+                    Based on your course notes
+                  </span>
+                </div>
+              ) : (
+                <div className="rounded-lg bg-amber-50 border border-amber-200/70 px-3 py-2 mb-3">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-sm">⚠️</span>
+                    <span className="text-xs font-bold text-amber-800 uppercase tracking-widest">
+                      Not covered in your course notes
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    This explanation is based on general knowledge — this topic was not found in your uploaded notes.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+          {!feedback && (
+            <div className="flex items-center gap-1.5 mb-3">
+              <span className="text-base">✨</span>
+              <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest">Explanation</h4>
+            </div>
+          )}
+          <MarkdownRenderer content={feedback?.aiExplanation ?? question.explanation ?? ''} />
         </div>
       )}
 
-      {feedback && feedback.relevantNotes.length > 0 && (
+      {feedback && feedback.explanationSource === 'COURSE_NOTES' && feedback.relevantNotes.length > 0 && (
         <div>
           <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-2">
             Relevant Notes
@@ -111,6 +137,7 @@ const AnswerCard: React.FC<AnswerCardProps> = ({
           </div>
         </div>
       )}
+
 
       {!feedback && question.confidence && (
         <ConfidenceBadge
@@ -145,11 +172,7 @@ const AnswerCard: React.FC<AnswerCardProps> = ({
               {question.publicQuestions.map((pq) => (
                 <QuestionDiscussion
                   key={pq.id}
-                  anchorText={pq.anchorText}
-                  content={pq.content}
-                  author={pq.author}
-                  likes={pq.likes}
-                  replies={pq.replies}
+                  question={pq}
                 />
               ))}
             </motion.div>

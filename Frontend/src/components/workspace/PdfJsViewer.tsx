@@ -2,21 +2,21 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import { TextLayer } from 'pdfjs-dist';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
 import { buildDocumentSelection } from '../../utils/pdfSelection';
 import type { DocumentSelection } from '../../types/documentSelection';
-import type { KnowledgePin, PublicQuestion, ExamQuestion } from '../../types/workspace';
+import type { KnowledgePin, PublicQuestion } from '../../types/workspace';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString();
 
-interface QuestionLocationJson {
-  page_dimensions?: { width?: number; height?: number };
-  regions?: { type?: string; bbox?: { x: number; y: number; width: number; height: number } }[];
-}
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 2.5;
+const ZOOM_STEP = 0.2;
+const DEFAULT_ZOOM_SCALE = 1.0; // multiplier on top of fit-width
 
 interface PdfJsViewerProps {
   url: string;
@@ -24,23 +24,16 @@ interface PdfJsViewerProps {
   documentVersion: number;
   pins?: KnowledgePin[];
   questions?: PublicQuestion[];
-  /** Past-exam questions to overlay onto their stored PDF locations. */
-  examQuestions?: ExamQuestion[];
-  activeQuestionId?: string | null;
   onTextSelect: (selection: DocumentSelection) => void;
   onPinClick?: (pinId: string) => void;
   onQuestionClick?: (questionId: string) => void;
-  onPracticeQuestion?: (questionId: string) => void;
 }
 
 const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
   url,
   documentId,
   documentVersion,
-  examQuestions,
-  activeQuestionId,
   onTextSelect,
-  onPracticeQuestion,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageElementsRef = useRef<Map<number, HTMLElement>>(new Map());
@@ -49,6 +42,16 @@ const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
   const pageTextLengthsRef = useRef<Map<number, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // zoomMultiplier: applied on top of the fit-width base scale
+  const [zoomMultiplier, setZoomMultiplier] = useState(DEFAULT_ZOOM_SCALE);
+
+  const changeZoom = (delta: number) => {
+    setZoomMultiplier((prev) =>
+      Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((prev + delta) * 10) / 10)),
+    );
+  };
+
+  const resetZoom = () => setZoomMultiplier(DEFAULT_ZOOM_SCALE);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +80,8 @@ const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
           if (cancelled) return;
 
           const unscaled = page.getViewport({ scale: 1 });
-          const scale = Math.min(1.5, Math.max(0.8, (containerWidth - 64) / unscaled.width));
+          const baseScale = Math.min(1.5, Math.max(0.8, (containerWidth - 64) / unscaled.width));
+          const scale = baseScale * zoomMultiplier;
           const viewport = page.getViewport({ scale });
 
           pageViewportsRef.current.set(pageNum, viewport);
@@ -124,7 +128,6 @@ const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
         }
 
         host.appendChild(fragment);
-        injectQuestionOverlays(host);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load PDF');
@@ -139,52 +142,8 @@ const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url]);
+  }, [url, zoomMultiplier]);
 
-  /** Position past-exam question overlays using the persisted location_json bounding boxes. */
-  const injectQuestionOverlays = (host: HTMLDivElement) => {
-    if (!examQuestions || examQuestions.length === 0 || !onPracticeQuestion) return;
-
-    for (const question of examQuestions) {
-      if (!question.pageNumber) continue;
-      const wrapper = host.querySelector<HTMLElement>(
-        `.pdf-page-wrapper[data-pdf-page="${question.pageNumber}"]`,
-      );
-      const location = question.location as QuestionLocationJson | null;
-      const bbox = location?.regions?.find((r) => r.bbox)?.bbox;
-      if (!wrapper || !bbox) continue;
-
-      const scale = pageScalesRef.current.get(question.pageNumber) ?? 1;
-
-      const overlay = document.createElement('div');
-      overlay.className =
-        'exam-question-overlay group absolute rounded-md border-2 border-transparent hover:border-teal-400/70 hover:bg-teal-100/20 transition-colors cursor-pointer z-10';
-      overlay.style.left = `${bbox.x * scale - 4}px`;
-      overlay.style.top = `${bbox.y * scale - 4}px`;
-      overlay.style.width = `${Math.max(bbox.width * scale + 8, 32)}px`;
-      overlay.style.height = `${Math.max(bbox.height * scale + 8, 24)}px`;
-      overlay.title = `Question ${question.number}`;
-      if (activeQuestionId === question.id) {
-        overlay.classList.add('border-teal-500', 'bg-teal-100/30');
-      }
-      overlay.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onPracticeQuestion(question.id);
-      });
-
-      const chip = document.createElement('button');
-      chip.className =
-        'absolute left-1/2 top-full -translate-x-1/2 mt-1 px-3 py-1.5 rounded-lg bg-teal-700 text-white text-[11px] font-bold opacity-0 group-hover:opacity-100 transition-opacity premium-shadow whitespace-nowrap';
-      chip.textContent = `Practice Q${question.number}`;
-      chip.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onPracticeQuestion(question.id);
-      });
-      overlay.appendChild(chip);
-
-      wrapper.appendChild(overlay);
-    }
-  };
 
   const handleMouseUp = useCallback(() => {
     const sel = window.getSelection();
@@ -211,13 +170,42 @@ const PdfJsViewer: React.FC<PdfJsViewerProps> = ({
   }
 
   return (
-    <div className="h-full overflow-y-auto no-scrollbar bg-stone-100/80 py-8" onMouseUp={handleMouseUp}>
-      {loading && (
-        <div className="flex items-center justify-center py-20 text-stone-400">
-          <Loader2 className="w-6 h-6 animate-spin" />
-        </div>
-      )}
-      <div ref={containerRef} className="max-w-4xl mx-auto px-4" />
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Zoom toolbar */}
+      <div className="flex-shrink-0 flex items-center justify-end gap-1 px-4 py-2 bg-stone-50/80 border-b border-stone-200/60 backdrop-blur-sm">
+        <button
+          onClick={() => changeZoom(-ZOOM_STEP)}
+          disabled={zoomMultiplier <= MIN_ZOOM}
+          title="Zoom out"
+          className="p-1.5 rounded-lg text-stone-500 hover:bg-stone-200 hover:text-stone-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <ZoomOut className="w-4 h-4" />
+        </button>
+        <button
+          onClick={resetZoom}
+          title="Reset zoom"
+          className="px-2 py-1 rounded-lg text-xs font-bold text-stone-500 hover:bg-stone-200 hover:text-stone-800 transition-colors min-w-[3rem] text-center"
+        >
+          {Math.round(zoomMultiplier * 100)}%
+        </button>
+        <button
+          onClick={() => changeZoom(ZOOM_STEP)}
+          disabled={zoomMultiplier >= MAX_ZOOM}
+          title="Zoom in"
+          className="p-1.5 rounded-lg text-stone-500 hover:bg-stone-200 hover:text-stone-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <ZoomIn className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto no-scrollbar bg-stone-100/80 py-8" onMouseUp={handleMouseUp}>
+        {loading && (
+          <div className="flex items-center justify-center py-20 text-stone-400">
+            <Loader2 className="w-6 h-6 animate-spin" />
+          </div>
+        )}
+        <div ref={containerRef} className="max-w-4xl mx-auto px-4" />
+      </div>
     </div>
   );
 };

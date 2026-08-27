@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Loader2 } from 'lucide-react';
 import type { ExamQuestion } from '../../types/workspace';
 import type { ApiConfidenceLevel } from '../../services/examService';
 
@@ -13,6 +13,7 @@ interface QuestionWorkspaceProps {
   question: ExamQuestion;
   selectedIndex: number | null;
   submitted: boolean;
+  submitting?: boolean;
   onSelectAnswer: (index: number) => void;
   onSubmit: (confidence: ApiConfidenceLevel) => void;
 }
@@ -21,6 +22,7 @@ const QuestionWorkspace: React.FC<QuestionWorkspaceProps> = ({
   question,
   selectedIndex,
   submitted,
+  submitting = false,
   onSelectAnswer,
   onSubmit,
 }) => {
@@ -87,11 +89,14 @@ const QuestionWorkspace: React.FC<QuestionWorkspaceProps> = ({
 
           <button
             onClick={() => onSubmit(confidence)}
-            disabled={selectedIndex === null}
+            disabled={selectedIndex === null || submitting}
             className="w-full flex items-center justify-center gap-2 py-3 bg-teal-700 text-white rounded-xl text-sm font-bold hover:bg-teal-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed premium-shadow"
           >
-            <Send className="w-4 h-4" />
-            Submit Answer
+            {submitting ? (
+              <><Loader2 className="w-4 h-4 animate-spin" />Submitting…</>
+            ) : (
+              <><Send className="w-4 h-4" />Submit Answer</>
+            )}
           </button>
         </>
       )}

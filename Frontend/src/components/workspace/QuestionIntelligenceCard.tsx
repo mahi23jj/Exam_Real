@@ -6,6 +6,8 @@ interface QuestionIntelligenceCardProps {
 }
 
 const QuestionIntelligenceCard: React.FC<QuestionIntelligenceCardProps> = ({ intelligence }) => {
+  if (!intelligence) return null;
+
   return (
     <div className="rounded-xl border border-stone-100 bg-stone-50/50 p-4">
       <div className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">

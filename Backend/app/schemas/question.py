@@ -1,8 +1,14 @@
+import enum
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict, Field
 from app.db.models.student_answer import ConfidenceLevel
+
+
+class ExplanationSource(str, enum.Enum):
+    COURSE_NOTES = "COURSE_NOTES"
+    GENERAL_KNOWLEDGE = "GENERAL_KNOWLEDGE"
 
 
 class ChoiceInitialRead(BaseModel):
@@ -41,6 +47,7 @@ class AnswerHistoryItem(BaseModel):
     correct_choice_label: Optional[str] = None
     correct_choice_text: Optional[str] = None
     ai_explanation: Optional[str] = None
+    explanation_source: ExplanationSource = ExplanationSource.GENERAL_KNOWLEDGE
     confidence: Optional[str] = None
     answered_at: datetime
 
@@ -58,6 +65,10 @@ class RelevantNoteBlock(BaseModel):
     page_number: int
     content_snippet: str
     similarity_score: float
+    location: Dict[str, Any] = Field(default_factory=dict, validation_alias="location_json")
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
 
 
 class AnswerFeedbackResponse(BaseModel):
@@ -68,6 +79,7 @@ class AnswerFeedbackResponse(BaseModel):
     correct_choice_label: str
     correct_choice_text: str
     ai_explanation: str
+    explanation_source: ExplanationSource = ExplanationSource.GENERAL_KNOWLEDGE
     relevant_notes: List[RelevantNoteBlock]
 
 

@@ -11,6 +11,9 @@ const pinTypeConfig: Record<PinType, { label: string; color: string }> = {
   exam_hint: { label: 'Exam Hint', color: 'bg-amber-50 text-amber-700' },
   warning: { label: 'Warning', color: 'bg-rose-50 text-rose-700' },
   explanation: { label: 'Explanation', color: 'bg-teal-50 text-teal-700' },
+  common_mistake: { label: 'Common Mistake', color: 'bg-orange-50 text-orange-700' },
+  formula_tip: { label: 'Formula Tip', color: 'bg-emerald-50 text-emerald-700' },
+  other: { label: 'Other', color: 'bg-stone-50 text-stone-700' },
 };
 
 interface KnowledgePinDetailProps {

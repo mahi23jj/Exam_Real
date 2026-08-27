@@ -105,12 +105,9 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
         documentVersion={document.documentVersion ?? 1}
         pins={document.type === 'note' ? document.pins : []}
         questions={document.type === 'note' ? document.questions : []}
-        examQuestions={document.type === 'past_exam' ? document.questions : undefined}
-        activeQuestionId={activeQuestionId}
         onTextSelect={onTextSelect}
         onPinClick={onPinClick}
         onQuestionClick={onQuestionClick}
-        onPracticeQuestion={document.type === 'past_exam' ? onPracticeQuestion : undefined}
       />
     );
   }

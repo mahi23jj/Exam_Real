@@ -24,6 +24,7 @@ from app.schemas.question import (
     AnswerHistoryItem,
     RelevantNoteBlock,
     SimilarQuestionResponse,
+    ExplanationSource,
 )
 from app.services.cache_service import ExplanationCacheService
 
@@ -39,7 +40,7 @@ class QuestionService:
         self.hybrid_retriever = HybridRetriever(session)
         self.confidence_evaluator = RetrievalConfidenceEvaluator()
         self.cache_service = ExplanationCacheService()
-        self.llm = get_llm_provider()
+        self.llm = get_llm_provider("groq")
 
     def _map_question_read(self, q: PastExamQuestion) -> QuestionInitialRead:
         """Maps a PastExamQuestion to its read schema, preserving PDF location data."""
@@ -157,11 +158,12 @@ class QuestionService:
         )
         if cached_explanation:
             logger.info(f"Cache hit for question {question_id}")
-            relevant_note_blocks = []  # cached path skips RAG block building
+            relevant_note_blocks = []
             ai_explanation = cached_explanation
+            explanation_source = ExplanationSource.GENERAL_KNOWLEDGE  # cached; source unknown, safe default
         else:
             # ── Hybrid Retrieval ──────────────────────────────────────────────
-            relevant_note_blocks, ai_explanation = await self._retrieve_and_explain(
+            relevant_note_blocks, ai_explanation, explanation_source = await self._retrieve_and_explain(
                 question=question,
                 selected_choice=selected_choice,
                 correct_choice=correct_choice,
@@ -197,6 +199,7 @@ class QuestionService:
             correct_choice_label=correct_choice.choice_label if correct_choice else "A",
             correct_choice_text=correct_choice.choice_text if correct_choice else "",
             ai_explanation=ai_explanation,
+            explanation_source=explanation_source,
             relevant_notes=relevant_note_blocks
         )
 
@@ -237,6 +240,7 @@ class QuestionService:
             doc_map = {d.id: d.title for d in docs_res.scalars().all()}
 
         for block, score in reranked_results:
+            block_meta = block.metadata_json or {}
             relevant_note_blocks.append(
                 RelevantNoteBlock(
                     content_block_id=block.id,
@@ -244,7 +248,8 @@ class QuestionService:
                     document_title=doc_map.get(block.document_id, "Course Note"),
                     page_number=block.page_number,
                     content_snippet=block.content[:250] + ("..." if len(block.content) > 250 else ""),
-                    similarity_score=round(score, 4)
+                    similarity_score=round(score, 4),
+                    location_json=block_meta.get("location", {}),
                 )
             )
 
@@ -252,6 +257,15 @@ class QuestionService:
             [f"- [Source: {b.document_title}, Page {b.page_number}]: {b.content_snippet}"
              for b in relevant_note_blocks]
         )
+
+        # Determine explanation source BEFORE building prompt
+        if confidence == ConfidenceLevel.LOW:
+            explanation_source = ExplanationSource.GENERAL_KNOWLEDGE
+            # Clear notes so the response never includes irrelevant/weak citations
+            relevant_note_blocks = []
+            notes_text = ""
+        else:
+            explanation_source = ExplanationSource.COURSE_NOTES
 
         prompt = self._build_pedagogical_prompt(
             question=question,
@@ -267,7 +281,7 @@ class QuestionService:
             prompt=prompt, system_prompt=system_prompt
         )
 
-        return relevant_note_blocks, ai_explanation
+        return relevant_note_blocks, ai_explanation, explanation_source
 
     def _build_pedagogical_prompt(
         self,
@@ -321,12 +335,16 @@ class QuestionService:
                 "supplement with general academic knowledge but clearly label it as "
                 "[General Knowledge] vs [Course Notes: <source>]."
             )
-        else:  # LOW
+        else:  # LOW — no usable notes, explain from general knowledge
             notes_section = (
-                "Relevant Course Notes: [INSUFFICIENT — the course notes do not adequately cover this topic]\n\n"
-                "Inform the student that this topic is not sufficiently covered in their uploaded course materials. "
-                "Then provide a clear, general academic explanation. "
-                "Clearly label all content as [General Knowledge] since no specific course notes were found."
+                "Course Notes: NONE FOUND for this topic.\n\n"
+                "Provide a complete educational explanation using your general knowledge. You MUST:\n"
+                "1. Acknowledge briefly that this topic was not found in the course notes.\n"
+                "2. Explain why the student's chosen answer is correct or incorrect.\n"
+                "3. Explain clearly why the correct answer is correct.\n"
+                "4. Explain the underlying concept with any useful context or example.\n"
+                "5. End with a concise key takeaway.\n"
+                "Do NOT refuse. Do NOT cite course notes. Provide a full, high-quality explanation."
             )
 
         return base_context + wrong_answer_guidance + notes_section
@@ -344,9 +362,14 @@ class QuestionService:
             )
         else:
             return (
-                "You are a helpful academic tutor. The course notes are insufficient for this topic. "
-                "Explain using general academic knowledge, clearly labeling everything as [General Knowledge]. "
-                "Encourage the student to raise this with their instructor."
+                "You are a helpful academic tutor. The student's uploaded course notes do not adequately cover "
+                "this topic. You MUST still provide a complete, high-quality educational explanation. "
+                "Begin your response with a short notice that this topic was not found in the course notes "
+                "(e.g. '⚠️ Not covered in your course notes'). "
+                "Then give a thorough explanation using your general knowledge: explain why the chosen answer "
+                "is correct or incorrect, why the correct answer is correct, the underlying concept, "
+                "and a key takeaway. "
+                "Never claim the explanation came from the course notes. Never refuse to answer."
             )
 
     async def explain_differently(

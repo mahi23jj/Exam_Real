@@ -123,7 +123,7 @@ const QuestionSide: React.FC<{
         <p className="text-sm text-stone-700 leading-relaxed">{question.explanation}</p>
       </div>
 
-      <ConfidenceBadge level={question.confidence} noteTitle={question.noteReference?.title} />
+      <ConfidenceBadge level={question.confidence || 'low'} noteTitle={question.noteReference?.title} />
 
       <PanelChipNav
         chips={[

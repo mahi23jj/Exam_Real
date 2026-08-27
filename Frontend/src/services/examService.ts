@@ -5,6 +5,7 @@ import type {
   ExamHistoryItem,
   RelevantNote,
   ConfidenceLevel,
+  ExplanationSource,
 } from '../types/workspace';
 
 /** Question as returned by GET /documents/{document_id}/questions (correct answers hidden). */
@@ -43,6 +44,7 @@ export interface ApiRelevantNoteBlock {
   page_number: number;
   content_snippet: string;
   similarity_score: number;
+  location?: Record<string, unknown> | null;
 }
 
 export interface ApiAnswerFeedback {
@@ -53,6 +55,7 @@ export interface ApiAnswerFeedback {
   correct_choice_label: string;
   correct_choice_text: string;
   ai_explanation: string;
+  explanation_source?: string | null;
   relevant_notes: ApiRelevantNoteBlock[];
 }
 
@@ -67,6 +70,7 @@ export interface ApiAnswerHistoryItem {
   correct_choice_label?: string | null;
   correct_choice_text?: string | null;
   ai_explanation?: string | null;
+  explanation_source?: string | null;
   confidence?: string | null;
   answered_at: string;
 }
@@ -125,7 +129,13 @@ export function mapApiRelevantNotes(notes: ApiRelevantNoteBlock[]): RelevantNote
     pageNumber: n.page_number,
     contentSnippet: n.content_snippet,
     similarityScore: n.similarity_score,
+    location: n.location ?? null,
   }));
+}
+
+function mapExplanationSource(raw?: string | null): ExplanationSource {
+  if (raw === 'COURSE_NOTES') return 'COURSE_NOTES';
+  return 'GENERAL_KNOWLEDGE';
 }
 
 export function mapApiFeedbackToPracticeFeedback(fb: ApiAnswerFeedback): PracticeFeedback {
@@ -135,6 +145,7 @@ export function mapApiFeedbackToPracticeFeedback(fb: ApiAnswerFeedback): Practic
     correctChoiceLabel: fb.correct_choice_label,
     correctChoiceText: fb.correct_choice_text,
     aiExplanation: fb.ai_explanation,
+    explanationSource: mapExplanationSource(fb.explanation_source),
     relevantNotes: mapApiRelevantNotes(fb.relevant_notes ?? []),
   };
 }

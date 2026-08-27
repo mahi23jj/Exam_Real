@@ -15,34 +15,48 @@ import Profile from './src/pages/Profile';
 import Auth from './src/pages/Auth';
 import { AuthProvider } from './src/context/AuthContext';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
+
 const App: React.FC = () => {
   return (
     <Theme appearance="inherit" radius="large" scaling="100%">
-      <Router>
-        <AuthProvider>
-          <main className="min-h-screen font-inter">
-            <Routes>
-              {/* Set Courses as the default landing page for the preview */}
-              <Route path="/" element={<Auth />} />
-              <Route path="/courses" element={<Courses />} />
-              <Route path="/feed" element={<Feed />} />
-              <Route path="/community" element={<Community />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/course/:courseId" element={<CourseDetail />} />
-              <Route path="/workspace/:courseId" element={<CourseWorkspace />} />
-              <Route path="/auth" element={<Navigate to="/" replace />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-            <ToastContainer
-              position="top-right"
-              autoClose={3000}
-              newestOnTop
-              closeOnClick
-              pauseOnHover
-            />
-          </main>
-        </AuthProvider>
-      </Router>
+      <QueryClientProvider client={queryClient}>
+        <Router>
+          <AuthProvider>
+            <main className="min-h-screen font-inter">
+              <Routes>
+                {/* Set Courses as the default landing page for the preview */}
+                <Route path="/" element={<Auth />} />
+                <Route path="/courses" element={<Courses />} />
+                <Route path="/feed" element={<Feed />} />
+                <Route path="/community" element={<Community />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/course/:courseId" element={<CourseDetail />} />
+                <Route path="/workspace/:courseId" element={<CourseWorkspace />} />
+                <Route path="/auth" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+              <ToastContainer
+                position="top-right"
+                autoClose={3000}
+                newestOnTop
+                closeOnClick
+                pauseOnHover
+              />
+            </main>
+          </AuthProvider>
+        </Router>
+      </QueryClientProvider>
     </Theme>
   );
 }

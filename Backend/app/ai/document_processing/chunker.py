@@ -1,4 +1,5 @@
 from typing import List, Dict, Any
+from app.ai.document_processing.layout_matcher import LayoutMatcher
 
 
 class SemanticChunker:
@@ -28,11 +29,12 @@ class SemanticChunker:
                     current_chunk += ("\n\n" if current_chunk else "") + paragraph
                 else:
                     if current_chunk:
+                        _, location_json = LayoutMatcher.match_question_location(current_chunk, [], [page])
                         chunks.append({
                             "page_number": page_num,
                             "block_order": global_block_order,
                             "content": current_chunk,
-                            "metadata_json": {"char_length": len(current_chunk)}
+                            "metadata_json": {"char_length": len(current_chunk), "location": location_json}
                         })
                         global_block_order += 1
                     
@@ -48,11 +50,12 @@ class SemanticChunker:
                     current_chunk = overlap_text + ("\n\n" if overlap_text else "") + paragraph
 
             if current_chunk:
+                _, location_json = LayoutMatcher.match_question_location(current_chunk, [], [page])
                 chunks.append({
                     "page_number": page_num,
                     "block_order": global_block_order,
                     "content": current_chunk,
-                    "metadata_json": {"char_length": len(current_chunk)}
+                    "metadata_json": {"char_length": len(current_chunk), "location": location_json}
                 })
                 global_block_order += 1
 

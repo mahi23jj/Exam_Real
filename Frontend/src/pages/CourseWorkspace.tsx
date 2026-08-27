@@ -3,9 +3,11 @@ import { useParams, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, X } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 import { getCourse } from '../services/courseService';
 import { fetchCourseDocuments } from '../services/documentService';
+import { Shimmer, ShimmerText } from '../components/ui/Shimmer';
 import {
   fetchDocumentQuestions,
   fetchDocumentAnswerHistory,
@@ -23,6 +25,8 @@ import {
 } from '../services/socialService';
 import { mapCourseToWorkspace } from '../utils/mapCourseWorkspace';
 import { mapPinFromApi, mapQuestionFromApi, PIN_TYPE_TO_API } from '../utils/socialMappers';
+import { syncUserWithBackend, type BackendUser } from '../services/authService';
+import { ACCESS_TOKEN_KEY } from '../services/apiClient';
 import { useWorkspaceState } from '../hooks/useWorkspaceState';
 import type {
   PastExamDocument,
@@ -73,6 +77,7 @@ const CourseWorkspace: React.FC = () => {
   const [courseData, setCourseData] = useState<ReturnType<typeof mapCourseToWorkspace> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<BackendUser | null>(null);
 
   const loadWorkspace = useCallback(async () => {
     if (!courseId) return;
@@ -84,6 +89,11 @@ const CourseWorkspace: React.FC = () => {
       ]);
       setCourseData(mapCourseToWorkspace(course, docs));
       setError(null);
+      
+      const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+      if (token) {
+        syncUserWithBackend(token).then(setCurrentUser).catch(console.error);
+      }
     } catch (err) {
       setCourseData(null);
       setError(err instanceof Error ? err.message : 'Failed to load course');
@@ -124,8 +134,10 @@ const CourseWorkspace: React.FC = () => {
   const [savingPin, setSavingPin] = useState(false);
   const [savingQuestion, setSavingQuestion] = useState(false);
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
+  // examQuestionsByDoc caches questions per document when not using react-query (for exams already open)
   const [examQuestionsByDoc, setExamQuestionsByDoc] = useState<Record<string, ExamQuestion[]>>({});
   const [fetchedHistory, setFetchedHistory] = useState<ExamHistoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const loadDocumentAnnotations = useCallback(async (documentId: string) => {
     try {
@@ -148,44 +160,77 @@ const CourseWorkspace: React.FC = () => {
     }
   }, []);
 
+  const handlePinMutate = useCallback((documentId: string, updatedPin: KnowledgePin | { id: string; deleted: boolean }) => {
+    setDocumentAnnotations((prev) => {
+      const docData = prev[documentId] ?? { pins: [], questions: [] };
+      let newPins = [...docData.pins];
+      if ('deleted' in updatedPin) {
+        newPins = newPins.filter(p => p.id !== updatedPin.id);
+      } else {
+        const idx = newPins.findIndex(p => p.id === updatedPin.id);
+        if (idx >= 0) newPins[idx] = updatedPin;
+        else newPins.push(updatedPin);
+      }
+      return { ...prev, [documentId]: { ...docData, pins: newPins } };
+    });
+  }, []);
+
+  const handleQuestionMutate = useCallback((documentId: string, updatedQ: PublicQuestion | { id: string; deleted: boolean }) => {
+    setDocumentAnnotations((prev) => {
+      const docData = prev[documentId] ?? { pins: [], questions: [] };
+      let newQs = [...docData.questions];
+      if ('deleted' in updatedQ) {
+        newQs = newQs.filter(q => q.id !== updatedQ.id);
+      } else {
+        const idx = newQs.findIndex(q => q.id === updatedQ.id);
+        if (idx >= 0) newQs[idx] = updatedQ;
+        else newQs.push(updatedQ);
+      }
+      return { ...prev, [documentId]: { ...docData, questions: newQs } };
+    });
+  }, []);
+
   useEffect(() => {
     if (!state.activeDocumentId) return;
     void loadDocumentAnnotations(state.activeDocumentId);
   }, [state.activeDocumentId, loadDocumentAnnotations]);
 
   // ── Past Exams: load questions & answer history when a past exam is opened ──
+  const activePastExamId =
+    state.activeDocument?.type === 'past_exam' ? state.activeDocument.id : null;
+
+  const { data: pastExamQuestionsData, isLoading: isLoadingQuestions } = useQuery({
+    queryKey: ['past-exam-questions', activePastExamId],
+    queryFn: () => fetchDocumentQuestions(activePastExamId!),
+    enabled: !!activePastExamId,
+    staleTime: 1000 * 60 * 10, // 10 min — questions rarely change
+  });
+
+  // Sync question query results into examQuestionsByDoc
   useEffect(() => {
-    if (!state.activeDocument || state.activeDocument.type !== 'past_exam') return;
-    const documentId = state.activeDocument.id;
+    if (pastExamQuestionsData && activePastExamId) {
+      setExamQuestionsByDoc((prev) => ({
+        ...prev,
+        [activePastExamId]: pastExamQuestionsData.map(mapApiQuestionToWorkspace),
+      }));
+    }
+  }, [pastExamQuestionsData, activePastExamId]);
+
+  // ── History ──
+  useEffect(() => {
+    if (!activePastExamId) return;
     let cancelled = false;
+    setLoadingHistory(true);
+    setFetchedHistory([]);
+    fetchDocumentAnswerHistory(activePastExamId)
+      .then((apiHistory) => {
+        if (!cancelled) setFetchedHistory(apiHistory.map(mapApiHistoryToExamHistoryItem));
+      })
+      .catch(() => { /* history stays empty */ })
+      .finally(() => { if (!cancelled) setLoadingHistory(false); });
+    return () => { cancelled = true; };
+  }, [activePastExamId]);
 
-    const loadPastExamData = async () => {
-      try {
-        const apiQuestions = await fetchDocumentQuestions(documentId);
-        if (!cancelled) {
-          setExamQuestionsByDoc((prev) => ({
-            ...prev,
-            [documentId]: apiQuestions.map(mapApiQuestionToWorkspace),
-          }));
-        }
-      } catch {
-        /* questions stay empty; viewer shows intro only */
-      }
-      try {
-        const apiHistory = await fetchDocumentAnswerHistory(documentId);
-        if (!cancelled) {
-          setFetchedHistory(apiHistory.map(mapApiHistoryToExamHistoryItem));
-        }
-      } catch {
-        /* history stays empty */
-      }
-    };
-
-    void loadPastExamData();
-    return () => {
-      cancelled = true;
-    };
-  }, [state.activeDocumentId, state.activeDocument?.type]);
 
   const activeNoteDoc = useMemo(() => {
     if (state.activeDocument?.type !== 'note') return null;
@@ -211,10 +256,10 @@ const CourseWorkspace: React.FC = () => {
   }, [state.activeDocument, activeNoteDoc, examQuestionsByDoc]);
 
   const practiceQuestion: ExamQuestion | null = useMemo(() => {
-    if (!state.practice || state.activeDocument?.type !== 'past_exam') return null;
-    const exam = state.activeDocument as PastExamDocument;
-    return exam.questions.find((q) => q.id === state.practice!.questionId) ?? null;
-  }, [state.practice, state.activeDocument]);
+    if (!state.practice || activeDocument?.type !== 'past_exam') return null;
+    const exam = activeDocument as PastExamDocument;
+    return exam.questions?.find((q) => q.id === state.practice!.questionId) ?? null;
+  }, [state.practice, activeDocument]);
 
   // Prefer server-fetched history; newly submitted items are already prepended to fetchedHistory.
   const displayHistory = fetchedHistory.length > 0 ? fetchedHistory : state.examHistory;
@@ -271,7 +316,7 @@ const CourseWorkspace: React.FC = () => {
         const created = await createPin({
           title: data.title,
           content: data.note || data.anchorText,
-          pin_type: PIN_TYPE_TO_API[data.type],
+          pin_type: PIN_TYPE_TO_API[data.type] as any,
           visibility: data.visibility,
           page_number: state.selection.pageNumber,
           target_type: 'PARAGRAPH',
@@ -279,7 +324,7 @@ const CourseWorkspace: React.FC = () => {
           selection_start_offset: state.selection.startOffset,
           selection_end_offset: state.selection.endOffset,
           selected_text_snapshot: state.selection.selectedText,
-          location_metadata_json: state.selection.locationMetadata,
+          location_metadata_json: state.selection.locationMetadata as any,
           document_id: state.activeDocumentId,
           document_version: state.selection.documentVersion,
         });
@@ -323,7 +368,7 @@ const CourseWorkspace: React.FC = () => {
           selection_start_offset: state.selection.startOffset,
           selection_end_offset: state.selection.endOffset,
           selected_text_snapshot: state.selection.selectedText,
-          location_metadata_json: state.selection.locationMetadata,
+          location_metadata_json: state.selection.locationMetadata as any,
           document_id: state.activeDocumentId,
           document_version: state.selection.documentVersion,
         });
@@ -447,6 +492,12 @@ const CourseWorkspace: React.FC = () => {
         practiceFeedback={state.practice?.feedback ?? null}
         practiceSubmitting={submittingAnswer}
         examHistory={displayHistory}
+        allExamQuestions={
+          activeDocument?.type === 'past_exam'
+            ? (activeDocument as import('../types/workspace').PastExamDocument).questions
+            : []
+        }
+        onSelectQuestion={startPractice}
         onOpenNote={handleOpenNote}
         onGoToNote={handleGoToNote}
         onOpenChatHistory={() => dispatch({ type: 'SET_CHAT_HISTORY_OPEN', open: true })}
@@ -457,13 +508,34 @@ const CourseWorkspace: React.FC = () => {
         onPostQuestion={handlePostQuestion}
         savingPin={savingPin}
         savingQuestion={savingQuestion}
+        currentUser={currentUser}
+        isLoadingQuestions={isLoadingQuestions || loadingHistory}
+        isSubmitting={submittingAnswer}
+        onPinMutate={(pin) => state.activeDocument && handlePinMutate(state.activeDocument.id, pin)}
+        onQuestionMutate={(q) => state.activeDocument && handleQuestionMutate(state.activeDocument.id, q)}
       />
     </aside>
   );
 
   const documentPanel = loading ? (
-    <div className="h-full flex items-center justify-center text-stone-400">
-      <Loader2 className="w-6 h-6 animate-spin" />
+    // Workspace skeleton — looks like a PDF document loading
+    <div className="h-full overflow-y-auto no-scrollbar bg-stone-100/80 py-8">
+      <div className="max-w-3xl mx-auto px-4 space-y-6">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl premium-shadow p-8 space-y-4">
+            <ShimmerText className="w-1/3 h-3" />
+            <ShimmerText className="w-full h-4" />
+            <ShimmerText className="w-5/6 h-4" />
+            <ShimmerText className="w-full h-4" />
+            <ShimmerText className="w-4/5 h-4" />
+            <div className="pt-2 space-y-3">
+              <ShimmerText className="w-full h-4" />
+              <ShimmerText className="w-full h-4" />
+              <ShimmerText className="w-3/4 h-4" />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   ) : error ? (
     <div className="h-full flex flex-col items-center justify-center px-6 text-center">

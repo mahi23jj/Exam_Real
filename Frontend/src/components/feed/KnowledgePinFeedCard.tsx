@@ -31,6 +31,21 @@ const pinTypeConfig: Record<PinType, { label: string; color: string; dot: string
     color: 'bg-teal-50 text-teal-700',
     dot: 'bg-teal-400',
   },
+  common_mistake: {
+    label: 'Common Mistake',
+    color: 'bg-orange-50 text-orange-700',
+    dot: 'bg-orange-400',
+  },
+  formula_tip: {
+    label: 'Formula Tip',
+    color: 'bg-emerald-50 text-emerald-700',
+    dot: 'bg-emerald-400',
+  },
+  other: {
+    label: 'Other',
+    color: 'bg-stone-50 text-stone-700',
+    dot: 'bg-stone-400',
+  },
 };
 
 interface KnowledgePinFeedCardProps {

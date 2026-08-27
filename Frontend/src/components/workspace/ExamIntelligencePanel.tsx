@@ -17,7 +17,9 @@ const ExamIntelligencePanel: React.FC<ExamIntelligencePanelProps> = ({
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const topicCounts = document.questions.reduce<Record<string, number>>((acc, q) => {
-    acc[q.intelligence.topic] = (acc[q.intelligence.topic] || 0) + q.intelligence.mostAskedCount;
+    if (q.intelligence) {
+      acc[q.intelligence.topic] = (acc[q.intelligence.topic] || 0) + q.intelligence.mostAskedCount;
+    }
     return acc;
   }, {});
 

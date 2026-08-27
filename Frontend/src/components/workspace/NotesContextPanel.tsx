@@ -1,9 +1,12 @@
 import React from 'react';
-import { Pin, HelpCircle, Sparkles, MapPin } from 'lucide-react';
+import { Pin, HelpCircle, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import PanelChipNav from './PanelChipNav';
 import KnowledgePinCard from './KnowledgePinCard';
+import QuestionDiscussion from './QuestionDiscussion';
 import type { NoteDocument, NotesChipTab, KnowledgePin, PublicQuestion } from '../../types/workspace';
+
+import type { BackendUser } from '../../services/authService';
 
 interface NotesContextPanelProps {
   document: NoteDocument;
@@ -11,6 +14,13 @@ interface NotesContextPanelProps {
   onTabChange: (tab: NotesChipTab) => void;
   onLocatePin: (pin: KnowledgePin) => void;
   onLocateQuestion: (question: PublicQuestion) => void;
+  pins: KnowledgePin[];
+  questions: PublicQuestion[];
+  onCreatePin: () => void;
+  onCreateQuestion: () => void;
+  currentUser?: BackendUser | null;
+  onPinMutate?: (pin: KnowledgePin | { id: string; deleted: boolean }) => void;
+  onQuestionMutate?: (q: PublicQuestion | { id: string; deleted: boolean }) => void;
 }
 
 const NotesContextPanel: React.FC<NotesContextPanelProps> = ({
@@ -19,11 +29,18 @@ const NotesContextPanel: React.FC<NotesContextPanelProps> = ({
   onTabChange,
   onLocatePin,
   onLocateQuestion,
+  pins,
+  questions,
+  onCreatePin,
+  onCreateQuestion,
+  currentUser,
+  onPinMutate,
+  onQuestionMutate,
 }) => {
   const chips = [
     { id: 'guide', label: 'Guide' },
-    { id: 'pins', label: 'Knowledge Pins', count: document.pins.length },
-    { id: 'questions', label: 'Questions', count: document.questions.length },
+    { id: 'pins', label: 'Knowledge Pins', count: pins.length },
+    { id: 'questions', label: 'Questions', count: questions.length },
   ];
 
   return (
@@ -33,10 +50,20 @@ const NotesContextPanel: React.FC<NotesContextPanelProps> = ({
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 pb-4">
         {activeTab === 'guide' && <GuideTab document={document} />}
         {activeTab === 'pins' && (
-          <PinsTab pins={document.pins} onLocate={onLocatePin} />
+          <PinsTab 
+            pins={pins} 
+            onLocate={onLocatePin} 
+            currentUser={currentUser} 
+            onPinMutate={onPinMutate} 
+          />
         )}
         {activeTab === 'questions' && (
-          <QuestionsTab questions={document.questions} onLocate={onLocateQuestion} />
+          <QuestionsTab 
+            questions={questions} 
+            onLocate={onLocateQuestion} 
+            currentUser={currentUser} 
+            onQuestionMutate={onQuestionMutate} 
+          />
         )}
       </div>
     </div>
@@ -86,7 +113,9 @@ const GuideItem: React.FC<{ icon: React.ElementType; label: string; color: strin
 const PinsTab: React.FC<{
   pins: KnowledgePin[];
   onLocate: (pin: KnowledgePin) => void;
-}> = ({ pins, onLocate }) => (
+  currentUser?: BackendUser | null;
+  onPinMutate?: (pin: KnowledgePin | { id: string; deleted: boolean }) => void;
+}> = ({ pins, onLocate, currentUser, onPinMutate }) => (
   <div className="space-y-3">
     {pins.length === 0 ? (
       <p className="text-sm text-stone-400 py-4">No knowledge pins yet. Select text to create one.</p>
@@ -102,6 +131,8 @@ const PinsTab: React.FC<{
             pin={pin}
             onClick={() => onLocate(pin)}
             showLocateAction
+            currentUser={currentUser}
+            onPinMutate={onPinMutate}
           />
         </motion.div>
       ))
@@ -112,33 +143,27 @@ const PinsTab: React.FC<{
 const QuestionsTab: React.FC<{
   questions: PublicQuestion[];
   onLocate: (question: PublicQuestion) => void;
-}> = ({ questions, onLocate }) => (
+  currentUser?: import('../../services/authService').BackendUser | null;
+  onQuestionMutate?: (q: PublicQuestion | { id: string; deleted: boolean }) => void;
+}> = ({ questions, onLocate, currentUser, onQuestionMutate }) => (
   <div className="space-y-3">
     {questions.length === 0 ? (
       <p className="text-sm text-stone-400 py-4">No questions yet. Select text to ask one.</p>
     ) : (
       questions.map((q, idx) => (
-        <motion.button
+        <motion.div
           key={q.id}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: idx * 0.05, duration: 0.3 }}
-          onClick={() => onLocate(q)}
-          className="w-full text-left p-4 rounded-xl border border-stone-100 bg-white hover:border-stone-200 hover:-translate-y-0.5 hover:premium-shadow transition-all duration-200"
         >
-          <p className="text-xs text-stone-400 italic mb-1 line-clamp-1">"{q.anchorText}"</p>
-          <p className="text-sm text-stone-700 font-medium mb-2">{q.content}</p>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-stone-500">{q.author.name} · {q.createdAt}</span>
-            <span className="flex items-center gap-1 text-xs font-semibold text-teal-700">
-              <MapPin className="w-3 h-3" />
-              Click to locate
-            </span>
-          </div>
-          {q.replies.length > 0 && (
-            <span className="text-xs text-stone-400 mt-1 block">{q.replies.length} replies</span>
-          )}
-        </motion.button>
+          <QuestionDiscussion
+            question={q}
+            currentUser={currentUser}
+            onQuestionMutate={onQuestionMutate}
+            onLocate={() => onLocate(q)}
+          />
+        </motion.div>
       ))
     )}
   </div>

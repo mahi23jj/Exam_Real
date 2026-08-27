@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import AppLayout from '../components/layout/AppLayout';
 import SearchBar from '../components/SearchBars';
@@ -12,6 +13,7 @@ import Pagination from '../components/ui/Pagination';
 import CourseCard from '../components/CourseCard';
 import EmptyState from '../components/EmptyState';
 import CreateCourseModal from '../components/CreateCourseModal';
+import { Shimmer, ShimmerText } from '../components/ui/Shimmer';
 import { formatRelativeTime } from '../utils/format';
 import {
   fetchContinueItems,
@@ -30,6 +32,27 @@ type TabId = 'explore' | 'following' | 'mine';
 
 const PAGE_SIZE = 12;
 
+const CourseCardShimmer = () => (
+  <div className="w-full flex flex-col h-full overflow-hidden bg-white rounded-3xl border border-stone-200 p-5">
+    <div className="flex-1 space-y-4">
+      <div className="flex justify-between items-start gap-4">
+        <ShimmerText className="w-16 h-5 rounded-full" />
+      </div>
+      <div className="space-y-2">
+        <ShimmerText className="w-3/4 h-6" />
+        <ShimmerText className="w-full h-4" />
+        <ShimmerText className="w-5/6 h-4" />
+      </div>
+    </div>
+    <div className="mt-auto pt-6 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Shimmer className="w-8 h-8 rounded-full" />
+        <ShimmerText className="w-20 h-4" />
+      </div>
+    </div>
+  </div>
+);
+
 const continueTypeMap: Record<string, ContinueItemType> = {
   COURSE: 'course',
   DOCUMENT: 'document',
@@ -38,19 +61,12 @@ const continueTypeMap: Record<string, ContinueItemType> = {
 
 const Courses: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<TabId>('explore');
   const [modalOpen, setModalOpen] = useState(false);
   const [greeting, setGreeting] = useState('');
-
-  const [continueItems, setContinueItems] = useState<ContinueItem[]>([]);
-  const [explore, setExplore] = useState<ExploreCourse[]>([]);
-  const [following, setFollowing] = useState<FollowingCourse[]>([]);
-  const [mine, setMine] = useState<MyCourse[]>([]);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -59,46 +75,60 @@ const Courses: React.FC = () => {
     else setGreeting('Good evening');
   }, []);
 
-  const loadContinue = useCallback(async () => {
-    try {
-      setContinueItems(await fetchContinueItems(10));
-    } catch {
-      setContinueItems([]);
-    }
-  }, []);
+  const { data: continueItems = [] } = useQuery({
+    queryKey: ['continue-items'],
+    queryFn: () => fetchContinueItems(10).catch(() => []),
+  });
 
-  useEffect(() => {
-    void loadContinue();
-  }, [loadContinue]);
+  const { data: exploreData, isLoading: isLoadingExplore, error: exploreError } = useQuery({
+    queryKey: ['courses', 'explore', page],
+    queryFn: () => fetchExploreCourses({ page, size: PAGE_SIZE }),
+    enabled: activeTab === 'explore',
+  });
 
-  const loadCourses = useCallback(async (tab: TabId, pageNumber: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (tab === 'explore') {
-        const data = await fetchExploreCourses({ page: pageNumber, size: PAGE_SIZE });
-        setExplore(data.items);
-        setTotal(data.total);
-      } else if (tab === 'following') {
-        const data = await fetchFollowingCourses({ page: pageNumber, size: PAGE_SIZE });
-        setFollowing(data.items);
-        setTotal(data.total);
-      } else {
-        const data = await fetchMyCourses({ page: pageNumber, size: PAGE_SIZE });
-        setMine(data.items);
-        setTotal(data.total);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load courses');
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: followingData, isLoading: isLoadingFollowing, error: followingError } = useQuery({
+    queryKey: ['courses', 'following', page],
+    queryFn: () => fetchFollowingCourses({ page, size: PAGE_SIZE }),
+    enabled: activeTab === 'following',
+  });
 
-  useEffect(() => {
-    void loadCourses(activeTab, page);
-  }, [activeTab, page, loadCourses]);
+  const { data: mineData, isLoading: isLoadingMine, error: mineError } = useQuery({
+    queryKey: ['courses', 'mine', page],
+    queryFn: () => fetchMyCourses({ page, size: PAGE_SIZE }),
+    enabled: activeTab === 'mine',
+  });
+
+  const toggleFollowMutation = useMutation({
+    mutationFn: (courseId: string) => toggleCourseFollow(courseId),
+    onSuccess: (result, courseId) => {
+      // Optimistically update explore cache if it exists
+      queryClient.setQueriesData({ queryKey: ['courses', 'explore'] }, (oldData: any) => {
+        if (!oldData?.items) return oldData;
+        return {
+          ...oldData,
+          items: oldData.items.map((c: any) =>
+            c.id === courseId
+              ? {
+                  ...c,
+                  is_following: result.is_following,
+                  stats: { ...(c.stats ?? {}), followers_count: result.followers_count },
+                }
+              : c
+          ),
+        };
+      });
+      // Invalidate following cache to refresh the list
+      queryClient.invalidateQueries({ queryKey: ['courses', 'following'] });
+      
+      toast.success(result.is_following ? `You're now following the course` : `Unfollowed the course`, {
+        icon: <Sparkles className="w-4 h-4 text-teal-600" />,
+        className: 'premium-shadow rounded-2xl border-none',
+      });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Could not update follow');
+    },
+  });
 
   const handleTabChange = (tab: TabId) => {
     setActiveTab(tab);
@@ -113,39 +143,17 @@ const Courses: React.FC = () => {
           title: course.title,
           subtitle: course.category ?? null,
         });
-        void loadContinue();
+        queryClient.invalidateQueries({ queryKey: ['continue-items'] });
       } catch {
         // Tracking is best-effort; never block navigation on it.
       }
       navigate(`/workspace/${course.id}`);
     },
-    [navigate, loadContinue],
+    [navigate, queryClient],
   );
 
-  const handleFollow = async (course: ExploreCourse) => {
-    try {
-      const result = await toggleCourseFollow(course.id);
-      setExplore((prev) =>
-        prev.map((c) =>
-          c.id === course.id
-            ? {
-                ...c,
-                is_following: result.is_following,
-                stats: { ...(c.stats ?? {}), followers_count: result.followers_count },
-              }
-            : c,
-        ),
-      );
-      toast.success(
-        result.is_following ? `You're now following ${course.title}` : `Unfollowed ${course.title}`,
-        {
-          icon: <Sparkles className="w-4 h-4 text-teal-600" />,
-          className: 'premium-shadow rounded-2xl border-none',
-        },
-      );
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not update follow');
-    }
+  const handleFollow = (course: ExploreCourse) => {
+    toggleFollowMutation.mutate(course.id);
   };
 
   const matchesSearch = useCallback(
@@ -161,7 +169,7 @@ const Courses: React.FC = () => {
 
   const visibleCards = useMemo(() => {
     if (activeTab === 'explore') {
-      return explore
+      return (exploreData?.items ?? [])
         .filter((c) => matchesSearch(c.title, c.creator?.full_name, c.category))
         .map((course) => (
           <CourseCard
@@ -176,14 +184,14 @@ const Courses: React.FC = () => {
             tag={course.category}
             isFollowing={course.is_following}
             isActive={course.is_active !== false}
-            onFollow={() => void handleFollow(course)}
+            onFollow={() => handleFollow(course)}
             onOpen={() => void openCourse(course)}
           />
         ));
     }
 
     if (activeTab === 'following') {
-      return following
+      return (followingData?.items ?? [])
         .filter((c) => matchesSearch(c.title, c.creator?.full_name, c.category))
         .map((course) => (
           <CourseCard
@@ -205,7 +213,7 @@ const Courses: React.FC = () => {
         ));
     }
 
-    return mine
+    return (mineData?.items ?? [])
       .filter((c) => matchesSearch(c.title, 'You', c.category))
       .map((course) => (
         <CourseCard
@@ -223,12 +231,30 @@ const Courses: React.FC = () => {
           onManage={() => navigate(`/course/${course.id}`)}
         />
       ));
-  }, [activeTab, explore, following, mine, matchesSearch, openCourse, navigate]);
+  }, [activeTab, exploreData, followingData, mineData, matchesSearch, openCourse, navigate]);
+
+  const activeTotal = activeTab === 'explore' 
+    ? exploreData?.total 
+    : activeTab === 'following' 
+      ? followingData?.total 
+      : mineData?.total;
+
+  const isLoading = activeTab === 'explore' 
+    ? isLoadingExplore 
+    : activeTab === 'following' 
+      ? isLoadingFollowing 
+      : isLoadingMine;
+
+  const activeError = activeTab === 'explore' 
+    ? exploreError 
+    : activeTab === 'following' 
+      ? followingError 
+      : mineError;
 
   const tabsItems: TabItem<TabId>[] = [
-    { id: 'explore', label: 'Explore', count: activeTab === 'explore' ? total : undefined },
-    { id: 'following', label: 'Following', count: activeTab === 'following' ? total : undefined },
-    { id: 'mine', label: 'My Courses', count: activeTab === 'mine' ? total : undefined },
+    { id: 'explore', label: 'Explore', count: activeTab === 'explore' ? activeTotal : undefined },
+    { id: 'following', label: 'Following', count: activeTab === 'following' ? activeTotal : undefined },
+    { id: 'mine', label: 'My Courses', count: activeTab === 'mine' ? activeTotal : undefined },
   ];
 
   return (
@@ -298,19 +324,21 @@ const Courses: React.FC = () => {
             </div>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-20 text-stone-400">
-              <Loader2 className="w-6 h-6 animate-spin" />
-            </div>
-          ) : error ? (
-            <div className="text-center py-20">
-              <p className="text-sm font-semibold text-rose-600 mb-4">{error}</p>
+          {activeError ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <p className="text-sm font-semibold text-rose-600 mb-4">{String(activeError)}</p>
               <button
-                onClick={() => void loadCourses(activeTab, page)}
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['courses', activeTab] })}
                 className="px-6 py-3 bg-teal-700 text-white rounded-2xl font-bold text-sm"
               >
                 Try again
               </button>
+            </div>
+          ) : isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-8">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <CourseCardShimmer key={i} />
+              ))}
             </div>
           ) : (
             <>
@@ -351,7 +379,7 @@ const Courses: React.FC = () => {
                 </motion.div>
               </AnimatePresence>
 
-              <Pagination page={page} size={PAGE_SIZE} total={total} onChange={setPage} />
+              <Pagination page={page} size={PAGE_SIZE} total={activeTotal ?? 0} onChange={setPage} />
             </>
           )}
         </section>
@@ -364,7 +392,7 @@ const Courses: React.FC = () => {
           setModalOpen(false);
           toast.success(`Created ${course.title}`);
           if (activeTab === 'mine' && page === 1) {
-            void loadCourses('mine', 1);
+            queryClient.invalidateQueries({ queryKey: ['courses', 'mine'] });
           } else {
             setActiveTab('mine');
             setPage(1);

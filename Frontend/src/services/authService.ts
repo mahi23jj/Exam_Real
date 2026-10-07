@@ -20,11 +20,34 @@ export interface BackendUser {
   email: string;
   full_name: string | null;
   picture: string | null;
+  department: string | null;
   auth0_id: string | null;
   is_active: boolean;
+  profile_locked: boolean;
+  is_profile_complete: boolean;
   last_login: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface MyProfile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  picture: string | null;
+  department: string | null;
+  is_active: boolean;
+  profile_locked: boolean;
+  is_profile_complete: boolean;
+  last_login: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProfileUpdateInput {
+  full_name?: string;
+  department?: string;
+  picture?: string | null;
 }
 
 // ── Singleton Auth0 client ───────────────────────────────────────────────────
@@ -81,6 +104,51 @@ export async function syncUserWithBackend(accessToken: string): Promise<BackendU
   return response.json() as Promise<BackendUser>;
 }
 
+/**
+ * Reads the authenticated student's own editable profile.
+ * The local ExamReal record is authoritative; Auth0 only authenticates.
+ */
+export async function fetchMyProfile(accessToken: string): Promise<MyProfile> {
+  const response = await fetch(`${API_BASE_URL}/users/me/profile`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body?.detail ?? `Could not load your profile (${response.status})`);
+  }
+
+  return response.json() as Promise<MyProfile>;
+}
+
+/**
+ * Updates the editable profile fields. Omitted keys are left untouched.
+ */
+export async function updateMyProfile(
+  accessToken: string,
+  updates: ProfileUpdateInput,
+): Promise<MyProfile> {
+  const response = await fetch(`${API_BASE_URL}/users/me/profile`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updates),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body?.detail ?? `Could not save your profile (${response.status})`);
+  }
+
+  return response.json() as Promise<MyProfile>;
+}
+
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 
 /**
@@ -115,14 +183,15 @@ export async function loginWithEmailPassword(
 export async function signUpWithEmail(
   email: string,
   fullName: string,
-  password?: string,
+  password: string,
+  department: string,
 ): Promise<{ user: BackendUser; accessToken: string }> {
   const response = await fetch(`${API_BASE_URL}/auth/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ email, full_name: fullName, password }),
+    body: JSON.stringify({ email, full_name: fullName, password, department }),
   });
 
   if (!response.ok) {

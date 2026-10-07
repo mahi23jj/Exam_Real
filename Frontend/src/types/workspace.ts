@@ -1,4 +1,5 @@
 import type { DocumentSelection } from './documentSelection';
+import type { ContentSourceRead } from '../services/socialService';
 
 export type { DocumentSelection };
 
@@ -45,6 +46,11 @@ export interface Author {
   id: string;
   name: string;
   initials: string;
+  /** The current viewer's relationship with this author. */
+  relationship?: {
+    isFollowing: boolean;
+    isSelf: boolean;
+  };
 }
 
 export interface Comment {
@@ -73,6 +79,8 @@ export interface KnowledgePin {
   locationMetadata?: Record<string, unknown>;
   isLikedByMe?: boolean;
   isSavedByMe?: boolean;
+  /** Server-resolved origin for "Study in Context". */
+  source?: ContentSourceRead | null;
 }
 
 export interface PublicQuestion {
@@ -90,6 +98,8 @@ export interface PublicQuestion {
   status?: string;
   isLikedByMe?: boolean;
   isSavedByMe?: boolean;
+  /** Server-resolved origin for "Study in Context". */
+  source?: ContentSourceRead | null;
 }
 
 /** A course note block returned by the AI explanation as relevant material. */

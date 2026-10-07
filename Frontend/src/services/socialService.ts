@@ -16,6 +16,38 @@ export interface UserSummary {
   id: string;
   full_name?: string | null;
   email?: string | null;
+  picture?: string | null;
+  department?: string | null;
+}
+
+/** The viewer's relationship with a content author. */
+export interface AuthorRelationship {
+  is_following: boolean;
+  is_self: boolean;
+}
+
+/**
+ * Resolved origin of a piece of community content.
+ *
+ * The server only sets `can_open` / `open_url` when a real destination exists,
+ * so the UI must hide "Open in course" whenever `can_open` is false rather than
+ * attempting navigation.
+ */
+export interface ContentSourceRead {
+  document_id: string;
+  document_title?: string | null;
+  document_version?: number | null;
+  course_id?: string | null;
+  course_title?: string | null;
+  course_code?: string | null;
+  page_number?: number | null;
+  target_type?: string | null;
+  target_id?: string | null;
+  selection_start_offset?: number | null;
+  selection_end_offset?: number | null;
+  selected_text_snapshot?: string | null;
+  can_open: boolean;
+  open_url?: string | null;
 }
 
 export interface KnowledgePinRead {
@@ -41,8 +73,10 @@ export interface KnowledgePinRead {
   created_at: string;
   updated_at: string;
   author?: UserSummary | null;
+  relationship?: AuthorRelationship;
   is_liked_by_me: boolean;
   is_saved_by_me: boolean;
+  source?: ContentSourceRead | null;
 }
 
 export interface LearningQuestionRead {
@@ -70,8 +104,10 @@ export interface LearningQuestionRead {
   created_at: string;
   updated_at: string;
   author?: UserSummary | null;
+  relationship?: AuthorRelationship;
   is_liked_by_me: boolean;
   is_saved_by_me: boolean;
+  source?: ContentSourceRead | null;
 }
 
 export interface Paginated<T> {
@@ -289,4 +325,192 @@ export async function acceptQuestionReply(
   replyId: string,
 ): Promise<QuestionReplyRead> {
   return apiPost<QuestionReplyRead>(`/learning-questions/${questionId}/replies/${replyId}/accept`);
+}
+
+// ── User follows ────────────────────────────────────────────────────────────
+
+export interface FollowUserResponse {
+  is_following: boolean;
+  followers_count: number;
+  following_count: number;
+}
+
+export interface FollowStateRead extends FollowUserResponse {
+  is_self: boolean;
+}
+
+export function followUser(userId: string): Promise<FollowUserResponse> {
+  return apiPost<FollowUserResponse>(`/follows/users/${userId}`);
+}
+
+export function unfollowUser(userId: string): Promise<FollowUserResponse> {
+  return apiDelete<FollowUserResponse>(`/follows/users/${userId}`);
+}
+
+export function getUserFollowState(userId: string): Promise<FollowStateRead> {
+  return apiGet<FollowStateRead>(`/follows/users/${userId}/state`);
+}
+
+export interface FollowUserSummary {
+  id: string;
+  full_name: string;
+  picture?: string | null;
+  department?: string | null;
+  is_self: boolean;
+  is_following: boolean;
+  followers_count: number;
+  following_count: number;
+  followed_at?: string | null;
+}
+
+export function listMyFollowing(
+  page = 1,
+  size = 20,
+  search?: string,
+): Promise<Paginated<FollowUserSummary>> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (search?.trim()) params.set('search', search.trim());
+  return apiGet<Paginated<FollowUserSummary>>(`/follows/users?${params.toString()}`);
+}
+
+export function listUserFollowers(
+  userId: string,
+  page = 1,
+  size = 20,
+): Promise<Paginated<FollowUserSummary>> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  return apiGet<Paginated<FollowUserSummary>>(
+    `/follows/users/${userId}/followers?${params.toString()}`,
+  );
+}
+
+// ── People discovery & community profiles ───────────────────────────────────
+
+export interface SharedCourseRead {
+  id: string;
+  title: string;
+  code?: string | null;
+  category?: string | null;
+}
+
+export interface RecommendedUserRead {
+  id: string;
+  full_name?: string | null;
+  picture?: string | null;
+  department?: string | null;
+  same_department: boolean;
+  shared_courses: SharedCourseRead[];
+  recommendation_reasons: string[];
+  is_following: boolean;
+  follower_count: number;
+}
+
+export interface ProfileCourseRead extends SharedCourseRead {
+  open_url?: string | null;
+}
+
+export interface CommunityStatsRead {
+  total_pins: number;
+  total_questions: number;
+  total_answers: number;
+  total_helpful_contributions: number;
+  followers_count: number;
+  following_users_count: number;
+  following_courses_count: number;
+  following_count: number;
+}
+
+export interface CommunityProfileRead {
+  user: UserSummary;
+  stats: CommunityStatsRead;
+  public_pins: KnowledgePinRead[];
+  public_questions: LearningQuestionRead[];
+  is_following_user: boolean;
+  relationship: AuthorRelationship;
+  courses: ProfileCourseRead[];
+  pins_total: number;
+  questions_total: number;
+  page: number;
+  size: number;
+}
+
+export async function listRecommendedUsers(
+  page = 1,
+  size = 20,
+): Promise<Paginated<RecommendedUserRead>> {
+  const data = await apiGet<Paginated<RecommendedUserRead>>('/users/recommendations', {
+    page,
+    size,
+  });
+  return normalizePage(data, page, size);
+}
+
+export function getCommunityProfile(
+  userId: string,
+  page = 1,
+  size = 10,
+): Promise<CommunityProfileRead> {
+  return apiGet<CommunityProfileRead>(`/users/${userId}/community-profile`, { page, size });
+}
+
+// ── Unified feed ─────────────────────────────────────────────────────────────
+
+export type FeedScope = 'everyone' | 'following';
+export type FeedContentType = 'all' | 'pins' | 'questions';
+
+/** One entry in the unified feed: either a pin or a question. */
+export interface FeedItemRead {
+  content_type: FeedContentType;
+  id: string;
+  author?: UserSummary | null;
+  relationship?: AuthorRelationship;
+  created_at: string;
+  pin?: KnowledgePinRead | null;
+  question?: LearningQuestionRead | null;
+  reply_count: number;
+}
+
+export interface FeedPageResponse {
+  items: FeedItemRead[];
+  total: number;
+  page: number;
+  size: number;
+  has_more: boolean;
+  scope: FeedScope;
+  content_type: FeedContentType;
+}
+
+export interface FeedQuery {
+  scope?: FeedScope;
+  type?: FeedContentType;
+  search?: string;
+  /** Restrict the feed to one person selected in the Following rail. */
+  authorId?: string | null;
+  page?: number;
+  size?: number;
+}
+
+/**
+ * Chronological feed of questions and pins.
+ *
+ * The server merges both content types and paginates the combined set, so
+ * walking `page` from 1 upward visits every item exactly once.
+ */
+export async function listFeed(query: FeedQuery = {}): Promise<FeedPageResponse> {
+  const {
+    scope = 'everyone',
+    type = 'all',
+    search,
+    authorId,
+    page = 1,
+    size = 20,
+  } = query;
+  return apiGet<FeedPageResponse>('/community/feed-items', {
+    scope,
+    type,
+    ...(search ? { search } : {}),
+    ...(authorId ? { author_id: authorId } : {}),
+    page,
+    size,
+  });
 }

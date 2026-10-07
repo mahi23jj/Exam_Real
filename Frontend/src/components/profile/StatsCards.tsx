@@ -1,11 +1,12 @@
 import React from 'react';
-import { BookOpen, Pin, MessageCircle, Bookmark } from 'lucide-react';
+import { BookOpen, Pin, MessageCircle, Award } from 'lucide-react';
 
 export interface ProfileStats {
   courses: number;
   pins: number;
   questions: number;
-  saved: number;
+  answers: number;
+  helpful: number;
 }
 
 interface StatsCardsProps {
@@ -17,7 +18,7 @@ const StatsCards: React.FC<StatsCardsProps> = ({ stats }) => {
     { label: 'Courses', value: stats.courses, icon: BookOpen },
     { label: 'Pins', value: stats.pins, icon: Pin },
     { label: 'Questions', value: stats.questions, icon: MessageCircle },
-    { label: 'Saved', value: stats.saved, icon: Bookmark },
+    { label: 'Helpful answers', value: stats.helpful, icon: Award },
   ];
 
   return (
@@ -25,8 +26,8 @@ const StatsCards: React.FC<StatsCardsProps> = ({ stats }) => {
       {statItems.map((item, index) => {
         const Icon = item.icon;
         return (
-          <div 
-            key={index}
+          <div
+            key={item.label}
             className="bg-white rounded-2xl p-5 border border-stone-200/40 premium-shadow transition-all duration-300 hover:-translate-y-1 hover:premium-shadow-hover animate-in fade-in slide-in-from-bottom-4 fill-mode-both"
             style={{ animationDelay: `${(index + 1) * 100}ms` }}
           >

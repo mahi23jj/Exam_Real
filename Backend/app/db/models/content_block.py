@@ -5,6 +5,7 @@ from sqlalchemy import Text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from pgvector.sqlalchemy import Vector
 
+import app.db.dialect_compat  # noqa: F401  (registers SQLite compilers)
 from app.db.base import TimestampMixin, generate_uuid
 
 if TYPE_CHECKING:
@@ -23,7 +24,7 @@ class ContentBlock(TimestampMixin, table=True):
     # tsvector column for Full Text Search — populated by DB trigger (see migration 0006)
     content_tsv: Optional[str] = Field(
         default=None,
-        sa_column=Column("content_tsv", TSVECTOR, nullable=True)
+        sa_column=Column("content_tsv", TSVECTOR().with_variant(Text(), "sqlite"), nullable=True)
     )
     metadata_json: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
 
@@ -42,7 +43,9 @@ class Embedding(TimestampMixin, table=True):
     content_block_id: uuid.UUID = Field(foreign_key="content_blocks.id", unique=True, index=True, nullable=False)
     
     # 1024-dimensional vector for OpenAI text-embedding-3-small
-    vector: List[float] = Field(sa_column=Column(Vector(1024), nullable=False))
+    vector: List[float] = Field(
+        sa_column=Column(Vector(1024).with_variant(Text(), "sqlite"), nullable=False)
+    )
     model_name: str = Field(default="text-embedding-3-small", nullable=False)
 
     # Relationships

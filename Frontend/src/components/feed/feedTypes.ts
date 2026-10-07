@@ -1,21 +1,14 @@
 // Feed-specific TypeScript interfaces
 
-import type { PinType, Author, Comment } from '../../types/workspace';
+import type { PinType, Comment } from '../../types/workspace';
+import type { ContentSourceRead } from '../../services/socialService';
 
 export type FeedItemType = 'pin' | 'question';
 
-export type RecommendationReason =
-  | 'recommended_from_course'
-  | 'popular_this_week'
-  | 'same_topic'
-  | 'from_someone_you_follow';
-
-export const recommendationLabels: Record<RecommendationReason, string> = {
-  recommended_from_course: 'Recommended from a course you follow',
-  popular_this_week: 'Popular this week',
-  same_topic: 'Same topic you studied recently',
-  from_someone_you_follow: 'From someone you follow',
-};
+/**
+ * The backend does not yet compute a recommendation score, so cards must not
+ * claim a reason. Promote this to a real enum once ranking exists.
+ */
 
 export interface FeedAuthor {
   id: string;
@@ -38,10 +31,11 @@ export interface FeedPin {
   likes: number;
   saved: boolean;
   liked: boolean;
-  recommendation: RecommendationReason;
   // Source reference for "Study in Context"
   documentId: string;
   sectionId: string;
+  /** Server-resolved origin. Absent or `can_open: false` means no deep link. */
+  source?: ContentSourceRead | null;
 }
 
 export interface FeedQuestion {
@@ -59,10 +53,11 @@ export interface FeedQuestion {
   saved: boolean;
   replies: Comment[];
   replyCount: number;
-  recommendation: RecommendationReason;
   // Source reference for "Study in Context"
   documentId: string;
   sectionId: string;
+  /** Server-resolved origin. Absent or `can_open: false` means no deep link. */
+  source?: ContentSourceRead | null;
 }
 
 export type FeedItem = FeedPin | FeedQuestion;

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     API_V1_PREFIX: str = "/api/v1"
 
+    # Public application origin, also used as the Auth0 custom-claim namespace
+    APP_BASE_URL: str = "https://examreal.app"
+
     # Auth0 Configuration
     AUTH0_DOMAIN: str = ""
     AUTH0_CLIENT_ID: str = ""

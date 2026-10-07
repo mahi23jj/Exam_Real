@@ -13,7 +13,11 @@ def run_migrations() -> None:
     """Run Alembic migrations to the latest revision before app startup."""
     project_root = Path(__file__).resolve().parents[1]
     alembic_cfg = Config(str(project_root / "alembic.ini"))
-    alembic_cfg.set_main_option("script_location", str(project_root / "alembic"))
+    # env.py reads the URL from settings.DATABASE_URL, so no credential is
+    # baked into alembic.ini.
+    alembic_cfg.set_main_option(
+        "script_location", str(project_root / "app" / "db" / "migrations")
+    )
     command.upgrade(alembic_cfg, "head")
 
 

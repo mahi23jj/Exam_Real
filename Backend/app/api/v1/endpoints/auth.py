@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status, Form, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import HTTPBearer
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, Any, Dict
 
 from app.auth.dependencies import get_current_user
@@ -17,9 +17,24 @@ auth_scheme = HTTPBearer(auto_error=False)
 
 
 class RegisterRequest(BaseModel):
+    """Registration requires the editable profile fields up front.
+
+    Auth0 stays the authentication provider; ``full_name`` and ``department``
+    are stored locally and become the student's authoritative identity.
+    """
+
     email: EmailStr
     password: str
-    full_name: Optional[str] = None
+    full_name: str = Field(..., min_length=2, max_length=100)
+    department: str = Field(..., min_length=2, max_length=120)
+
+    @field_validator("full_name", "department", mode="after")
+    @classmethod
+    def strip_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 2:
+            raise ValueError("must be at least 2 characters")
+        return cleaned
 
 
 class LoginRequest(BaseModel):
@@ -42,7 +57,8 @@ async def register(
         await auth_service.register_user_in_auth0(
             email=request.email,
             password=request.password,
-            full_name=request.full_name
+            full_name=request.full_name,
+            department=request.department
         )
         
         # Log them in to get token
@@ -57,18 +73,30 @@ async def register(
 
         # Sync user in our DB
         payload = await auth_service.verify_token(access_token)
-        # Auth0 signup doesn't immediately put full_name in the token sometimes without rules, 
-        # but we can pass full_name explicitly to sync if it's missing in token.
-        if "name" not in payload and request.full_name:
+        # Auth0 signup doesn't always put full_name in the token without a
+        # rule, so inject the submitted values. sync_user treats them as
+        # fill-only, and they seed the authoritative local profile.
+        if "name" not in payload:
             payload["name"] = request.full_name
         
         user = await auth_service.sync_user(payload)
-        
+
+        if not user.department:
+            user = await auth_service.user_repo.patch(
+                user,
+                {
+                    "department": request.department,
+                    "profile_locked": True,
+                },
+            )
+
         return {
             "access_token": access_token,
             "token_type": login_response.get("token_type", "Bearer"),
             "user": user
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -99,6 +127,8 @@ async def login(
             "user": user
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
 
 

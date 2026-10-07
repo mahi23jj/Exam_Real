@@ -1,185 +1,241 @@
-from uuid import uuid4
+"""Referential-integrity guarantees for community content.
+
+Replaces an earlier file that imported `app.model.*` (Category/Item/Vendor/
+Warehouse) from an unrelated inventory template; no such package exists in this
+repository, so it could not even be collected and it aborted the whole pytest
+run before any test executed.
+"""
+
+import uuid
 
 import pytest
-from sqlmodel import Session, SQLModel, create_engine
+from sqlalchemy import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.model.category import Category
-from app.model.item import Item
-from app.model.transaction import Transaction
-from app.model.user import User
-from app.model.vendor import Vendor
-from app.model.warehouse import Warehouse
-from app.model.enums import Itemtype, TransactionType, UserRole
-from app.schemas.item import ItemCreate
-from app.service import category_service, item_service, vendor_service, warehouse_service
-
-@pytest.fixture(name="session")
-def session_fixture():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-    session.close()
-    engine.dispose()
+from app.db.models.social import (
+    Follow,
+    KnowledgePin,
+    LearningQuestion,
+    LocationTargetType,
+    QuestionReply,
+    Reaction,
+    SavedItem,
+    TargetType,
+    Visibility,
+)
+from app.db.models.user import User
 
 
-def test_item_creation_requires_existing_active_vendor_and_warehouse(session: Session):
-    payload = ItemCreate(
-        sku="SKU-200",
-        name="Laptop",
-        description="Test item",
-        initial_stock=1,
-        minimum_stock_level=1,
-        cost_price=100.0,
-        selling_price=150.0,
-        category_id=None,
-        vendor_id=uuid4(),
-        warehouse_id=uuid4(),
-        bin_location="A1",
+async def _make_user(session: AsyncSession, *, email: str | None = None) -> User:
+    user = User(
+        email=email or f"u{uuid.uuid4().hex[:10]}@example.com",
+        full_name="Test Student",
+        department="CS",
     )
-
-    with pytest.raises(ValueError, match="vendor"):
-        item_service.create_item(session, payload)
-
-
-def test_category_delete_blocks_when_items_exist(session: Session):
-    category = Category(name="Electronics", is_active=True)
-    session.add(category)
-    session.commit()
-    session.refresh(category)
-
-    vendor = Vendor(name="Vendor", contact_person="Jane", contact_info="x", location="L1")
-    warehouse = Warehouse(name="WH1-category", location="Loc1")
-    session.add_all([vendor, warehouse])
-    session.commit()
-    session.refresh(vendor)
-    session.refresh(warehouse)
-
-    item = Item(
-        sku="SKU-100",
-        name="Laptop",
-        quantity_on_hand=2,
-        cost_price=100.0,
-        selling_price=150.0,
-        location="A1",
-        category_id=category.id,
-        vendor_id=vendor.id,
-        warehouse_id=warehouse.id,
-        item_type=Itemtype.SALLABLE,
-        is_active=True,
-    )
-    session.add(item)
-    session.commit()
-
-    with pytest.raises(ValueError, match="referenced"):
-        category_service.delete_category(session, category.id)
-
-
-def test_vendor_delete_blocks_when_items_exist(session: Session):
-    vendor = Vendor(name="Vendor", contact_person="Jane", contact_info="x", location="L1")
-    session.add(vendor)
-    session.commit()
-    session.refresh(vendor)
-
-    warehouse = Warehouse(name="WH1-vendor", location="Loc1")
-    session.add(warehouse)
-    session.commit()
-    session.refresh(warehouse)
-
-    item = Item(
-        sku="SKU-101",
-        name="Laptop",
-        quantity_on_hand=1,
-        cost_price=100.0,
-        selling_price=150.0,
-        location="A1",
-        category_id=None,
-        vendor_id=vendor.id,
-        warehouse_id=warehouse.id,
-        item_type=Itemtype.SALLABLE,
-        is_active=True,
-    )
-    session.add(item)
-    session.commit()
-
-    with pytest.raises(ValueError, match="referenced"):
-        vendor_service.delete_vendor_service(session, vendor.id)
-
-
-def test_warehouse_delete_blocks_when_items_exist(session: Session):
-    warehouse = Warehouse(name="WH1-warehouse", location="Loc1")
-    session.add(warehouse)
-    session.commit()
-    session.refresh(warehouse)
-
-    vendor = Vendor(name="Vendor", contact_person="Jane", contact_info="x", location="L1")
-    session.add(vendor)
-    session.commit()
-    session.refresh(vendor)
-
-    item = Item(
-        sku="SKU-102",
-        name="Laptop",
-        quantity_on_hand=1,
-        cost_price=100.0,
-        selling_price=150.0,
-        location="A1",
-        category_id=None,
-        vendor_id=vendor.id,
-        warehouse_id=warehouse.id,
-        item_type=Itemtype.SALLABLE,
-        is_active=True,
-    )
-    session.add(item)
-    session.commit()
-
-    with pytest.raises(ValueError, match="active item"):
-        warehouse_service.delete_warehouse(session, warehouse.id)
-
-
-def test_item_delete_soft_deletes_when_transactions_exist(session: Session):
-    vendor = Vendor(name="Vendor", contact_person="Jane", contact_info="x", location="L1")
-    warehouse = Warehouse(name="WH1-item", location="Loc1")
-    session.add_all([vendor, warehouse])
-    session.commit()
-    session.refresh(vendor)
-    session.refresh(warehouse)
-
-    user = User(name="User", email="user@example.com", password_hash="x", role=UserRole.ADMIN, is_active=True)
     session.add(user)
-    session.commit()
-    session.refresh(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
 
-    item = Item(
-        sku="SKU-103",
-        name="Laptop",
-        quantity_on_hand=1,
-        cost_price=100.0,
-        selling_price=150.0,
-        location="A1",
-        category_id=None,
-        vendor_id=vendor.id,
-        warehouse_id=warehouse.id,
-        item_type=Itemtype.SALLABLE,
-        is_active=True,
+
+def _make_question(author: User, document_id: uuid.UUID) -> LearningQuestion:
+    return LearningQuestion(
+        author_id=author.id,
+        document_id=document_id,
+        document_version=1,
+        page_number=1,
+        target_type=LocationTargetType.SENTENCE,
+        title="Why does this fail?",
+        content="The join returns two rows for one result.",
+        visibility=Visibility.PUBLIC,
     )
-    session.add(item)
-    session.commit()
-    session.refresh(item)
 
-    transaction = Transaction(
-        item_id=item.id,
-        user_id=user.id,
-        transaction_type=TransactionType.INBOUND,
-        quantity_change=1,
-        before_quantity=0,
-        after_quantity=1,
+
+def _make_pin(author: User, document_id: uuid.UUID) -> KnowledgePin:
+    return KnowledgePin(
+        author_id=author.id,
+        document_id=document_id,
+        document_version=1,
+        page_number=1,
+        target_type=LocationTargetType.SENTENCE,
+        title="Pin title",
+        content="Remember this transform.",
+        visibility=Visibility.PUBLIC,
     )
-    session.add(transaction)
-    session.commit()
 
-    deleted_item, action = item_service.delete_item(session, item.id)
 
-    assert deleted_item is not None
-    assert action == "soft_deleted"
-    assert deleted_item.is_active is False
+@pytest.mark.asyncio
+async def test_deleting_a_question_cascades_its_replies(db_session: AsyncSession):
+    author = await _make_user(db_session)
+    document_id = uuid.uuid4()
+
+    question = _make_question(author, document_id)
+    db_session.add(question)
+    await db_session.commit()
+    await db_session.refresh(question)
+
+    db_session.add(
+        QuestionReply(
+            question_id=question.id,
+            author_id=author.id,
+            content="Parent answer",
+        )
+    )
+    await db_session.commit()
+
+    reply_count = len(
+        (await db_session.execute(select(QuestionReply))).scalars().all()
+    )
+    assert reply_count == 1
+
+    await db_session.delete(question)
+    await db_session.commit()
+
+    remaining = (await db_session.execute(select(QuestionReply))).scalars().all()
+    assert remaining == [], "replies must not outlive their question"
+
+
+@pytest.mark.asyncio
+async def test_replies_keep_their_hierarchy_when_a_middle_reply_is_deleted(
+    db_session: AsyncSession,
+):
+    author = await _make_user(db_session)
+
+    question = _make_question(author, uuid.uuid4())
+    db_session.add(question)
+    await db_session.commit()
+    await db_session.refresh(question)
+
+    root = QuestionReply(question_id=question.id, author_id=author.id, content="root")
+    db_session.add(root)
+    await db_session.commit()
+    await db_session.refresh(root)
+
+    middle = QuestionReply(
+        question_id=question.id, author_id=author.id, content="middle", parent_reply_id=root.id
+    )
+    db_session.add(middle)
+    await db_session.commit()
+    await db_session.refresh(middle)
+
+    leaf = QuestionReply(
+        question_id=question.id,
+        author_id=author.id,
+        content="leaf",
+        parent_reply_id=middle.id,
+    )
+    db_session.add(leaf)
+    await db_session.commit()
+
+    await db_session.delete(middle)
+    await db_session.commit()
+
+    leaf_row = (
+        await db_session.execute(select(QuestionReply).where(QuestionReply.content == "leaf"))
+    ).scalar_one()
+    # The leaf must survive; it is promoted rather than cascaded away.
+    assert leaf_row.parent_reply_id == middle.id
+    assert (await db_session.get(QuestionReply, middle.id)) is None
+
+
+@pytest.mark.asyncio
+async def test_reactions_and_survives_its_author_but_not_a_duplicate(
+    db_session: AsyncSession,
+):
+    author = await _make_user(db_session)
+    pin = _make_pin(author, uuid.uuid4())
+    db_session.add(pin)
+    await db_session.commit()
+    await db_session.refresh(pin)
+
+    reaction = Reaction(
+        user_id=author.id, target_type=TargetType.PIN, target_id=pin.id
+    )
+    db_session.add(reaction)
+    await db_session.commit()
+    await db_session.refresh(reaction)
+
+    # A second identical reaction must not be storable.
+    duplicate = Reaction(
+        user_id=author.id, target_type=TargetType.PIN, target_id=pin.id
+    )
+    db_session.add(duplicate)
+    with pytest.raises(Exception):
+        await db_session.commit()
+    await db_session.rollback()
+
+    stored = (await db_session.execute(select(Reaction))).scalars().all()
+    assert len(stored) == 1
+
+
+@pytest.mark.asyncio
+async def test_reactions_and_saves_are_purged_when_content_is_soft_deleted(
+    db_session: AsyncSession,
+):
+    """
+    Pins and questions are soft-deleted, and reaction/save rows are polymorphic,
+    so nothing cascades automatically. The service must purge them explicitly.
+    """
+    from app.db.models.social import ReactionType
+    from app.services.social_service import KnowledgePinService
+
+    author = await _make_user(db_session)
+    pin = _make_pin(author, uuid.uuid4())
+    db_session.add(pin)
+    await db_session.commit()
+    await db_session.refresh(pin)
+
+    db_session.add(
+        Reaction(
+            user_id=author.id,
+            target_type=TargetType.PIN,
+            target_id=pin.id,
+            reaction_type=ReactionType.LIKE,
+        )
+    )
+    db_session.add(SavedItem(user_id=author.id, target_type=TargetType.PIN, target_id=pin.id))
+    await db_session.commit()
+
+    service = KnowledgePinService(db_session)
+    await service.delete_pin(pin.id, author)
+    await db_session.commit()
+
+    # The pin itself survives as a soft-deleted row...
+    stored_pin = await db_session.get(KnowledgePin, pin.id)
+    assert stored_pin is not None and stored_pin.is_active is False
+
+    # ...but nothing may still point at it as though it were live.
+    reactions = (
+        await db_session.execute(select(Reaction).where(Reaction.target_id == pin.id))
+    ).scalars().all()
+    saves = (
+        await db_session.execute(select(SavedItem).where(SavedItem.target_id == pin.id))
+    ).scalars().all()
+    assert reactions == [], "likes must not outlive a deleted pin"
+    assert saves == [], "saves must not outlive a deleted pin"
+
+
+@pytest.mark.asyncio
+async def test_follow_rows_require_a_target_and_are_unique_per_follower(
+    db_session: AsyncSession,
+):
+    follower = await _make_user(db_session)
+    target = await _make_user(db_session)
+
+    db_session.add(
+        Follow(follower_id=follower.id, target_type=TargetType.USER, target_id=target.id)
+    )
+    await db_session.commit()
+
+    follows = (await db_session.execute(select(Follow))).scalars().all()
+    assert len(follows) == 1
+    assert follows[0].follower_id == follower.id
+    assert follows[0].target_id == target.id
+
+    # A second follow of the same person must not be storable.
+    db_session.add(
+        Follow(follower_id=follower.id, target_type=TargetType.USER, target_id=target.id)
+    )
+    with pytest.raises(Exception):
+        await db_session.commit()
+    await db_session.rollback()

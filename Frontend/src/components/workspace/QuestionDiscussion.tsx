@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, ChevronDown, ChevronUp, Trash2, MapPin, Send, MessageCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import type { PublicQuestion, Comment } from '../../types/workspace';
 import {
@@ -13,6 +14,7 @@ import {
 } from '../../services/socialService';
 import type { BackendUser } from '../../services/authService';
 import { formatRelativeTime } from '../../utils/format';
+import FollowUserButton from '../community/FollowUserButton';
 
 interface QuestionDiscussionProps {
   question: PublicQuestion;
@@ -53,6 +55,7 @@ const QuestionDiscussion: React.FC<QuestionDiscussionProps> = ({
   const [replyText, setReplyText] = useState('');
   const [submittingReply, setSubmittingReply] = useState(false);
   const [deleted, setDeleted] = useState(false);
+  const navigate = useNavigate();
 
   const isOwner = currentUser && question.author.id && currentUser.id === question.author.id;
 
@@ -140,20 +143,46 @@ const QuestionDiscussion: React.FC<QuestionDiscussionProps> = ({
   return (
     <div className="rounded-xl border border-stone-100 bg-white overflow-hidden">
       {/* Header — click to expand */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-start gap-3 p-4 text-left hover:bg-stone-50/50 transition-colors"
-      >
-        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center text-xs font-bold text-sky-600">
+      <div className="flex items-start gap-3 p-4 transition-colors">
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-label={expanded ? 'Collapse question' : 'Expand question'}
+          className="flex-shrink-0 w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center text-xs font-bold text-sky-600 hover:bg-sky-200 transition-colors"
+        >
           ?
-        </div>
-        <div className="flex-1 min-w-0">
+        </button>
+        <div
+          className="flex-1 min-w-0 cursor-pointer"
+          onClick={() => setExpanded(!expanded)}
+        >
           {question.anchorText && (
             <p className="text-xs text-stone-400 italic mb-1 line-clamp-1">"{question.anchorText}"</p>
           )}
           <p className="text-sm text-stone-700 font-medium line-clamp-2">{question.content}</p>
-          <div className="flex items-center gap-3 mt-2 text-xs text-stone-400">
-            <span>{question.author.name}</span>
+          <div className="flex items-center gap-3 mt-2 text-xs text-stone-400 flex-wrap">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/profile/${question.author.id}`);
+              }}
+              className="font-medium hover:text-teal-700 transition-colors"
+              title={`View ${question.author.name}'s profile`}
+            >
+              {question.author.name}
+            </button>
+            {question.author.id && !isOwner && (
+              <FollowUserButton
+                userId={question.author.id}
+                displayName={question.author.name}
+                size="sm"
+                seed={{
+                  isFollowing: question.author.relationship?.isFollowing,
+                  isSelf: question.author.relationship?.isSelf,
+                }}
+              />
+            )}
             <span className="flex items-center gap-1">
               <Heart className={`w-3 h-3 ${liked ? 'fill-rose-500 text-rose-500' : ''}`} />
               {likeCount}
@@ -164,12 +193,15 @@ const QuestionDiscussion: React.FC<QuestionDiscussionProps> = ({
             </span>
           </div>
         </div>
-        {expanded ? (
-          <ChevronUp className="w-4 h-4 text-stone-400 flex-shrink-0 mt-1" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-stone-400 flex-shrink-0 mt-1" />
-        )}
-      </button>
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-label={expanded ? 'Collapse question' : 'Expand question'}
+          className="flex-shrink-0 mt-1 text-stone-400 hover:text-stone-600 transition-colors"
+        >
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
 
       {/* Expanded body */}
       {expanded && (

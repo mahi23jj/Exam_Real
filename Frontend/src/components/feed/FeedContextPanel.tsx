@@ -7,11 +7,12 @@ import QuestionDetail from './QuestionDetail';
 
 interface FeedContextPanelProps {
   item: FeedItem | null;
-  onAddReply: (questionId: string, content: string) => void;
+  /** Keeps the feed card's reply count in step with the thread. */
+  onReplied?: (questionId: string, delta: number) => void;
   onClose: () => void;
 }
 
-const FeedContextPanel: React.FC<FeedContextPanelProps> = ({ item, onAddReply: _onAddReply, onClose }) => {
+const FeedContextPanel: React.FC<FeedContextPanelProps> = ({ item, onReplied, onClose }) => {
   // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -45,7 +46,14 @@ const FeedContextPanel: React.FC<FeedContextPanelProps> = ({ item, onAddReply: _
           >
             <PanelHeader onClose={onClose} item={item} />
             <div className="flex-1 overflow-y-auto no-scrollbar">
-              {item.type === 'pin' ? <KnowledgePinDetail pin={item} /> : <QuestionDetail question={item} />}
+              {item.type === 'pin' ? (
+                <KnowledgePinDetail pin={item} />
+              ) : (
+                <QuestionDetail
+                  question={item}
+                  onReplied={(questionId, delta) => onReplied?.(questionId, delta)}
+                />
+              )}
             </div>
           </motion.aside>
         </>

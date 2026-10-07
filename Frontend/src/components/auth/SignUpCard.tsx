@@ -12,6 +12,7 @@ const SignUpCard: React.FC<SignUpCardProps> = ({ onToggle }) => {
   const { signUp, loginWithGoogle } = useAuth();
 
   const [fullName, setFullName] = useState('');
+  const [department, setDepartment] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -26,6 +27,7 @@ const SignUpCard: React.FC<SignUpCardProps> = ({ onToggle }) => {
   });
 
   const [nameValid, setNameValid] = useState<boolean | null>(null);
+  const [departmentValid, setDepartmentValid] = useState<boolean | null>(null);
   const [emailValid, setEmailValid] = useState<boolean | null>(null);
   const [emailError, setEmailError] = useState('');
   const [pwFocused, setPwFocused] = useState(false);
@@ -82,8 +84,12 @@ useEffect(()=>{
       return;
     }
 
-    setNameValid(fullName.trim().length >= 2);
-  }, [fullName]);
+setNameValid(fullName.trim().length >= 2);
+    }, [fullName]);
+
+    useEffect(() => {
+      setDepartmentValid(department.trim().length >= 2);
+    }, [department]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -125,7 +131,7 @@ useEffect(()=>{
   }, [password, confirmPassword]);
 
   const isPasswordValid = Object.values(pwReqs).every(Boolean);
-  const isSubmitDisabled = !termsAccepted || loading || success || !nameValid || !emailValid || !isPasswordValid || !matchValid;
+  const isSubmitDisabled = !termsAccepted || loading || success || !nameValid || !departmentValid || !emailValid || !isPasswordValid || !matchValid;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -139,6 +145,11 @@ useEffect(()=>{
 
     if (!nameValid) {
       setFormError('Please enter your full name');
+      return;
+    }
+
+    if (!departmentValid) {
+      setFormError('Please enter your university department');
       return;
     }
 
@@ -165,7 +176,7 @@ useEffect(()=>{
 
     setLoading(true);
     try {
-      await signUp(email, fullName, password);
+      await signUp(email, fullName, password, department.trim());
       // AuthContext navigates to '/courses' on success
       setSuccess(true);
     } catch (err) {
@@ -253,6 +264,25 @@ useEffect(()=>{
             {nameValid === true && <Check className={`${styles.inputIconRight} ${styles.iconSuccess}`} size={18} />}
           </div>
           {nameValid === false && touched.name && <span className={styles.errorMsg}>Please enter your full name</span>}
+        </div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.label} htmlFor="signup-department">Department</label>
+          <div className={styles.inputWrapper}>
+            <input
+              id="signup-department"
+              type="text"
+              className={`${styles.input} ${departmentValid === true ? styles.valid : ''} ${departmentValid === false && touched.name ? styles.invalid : ''}`}
+              placeholder="Applied Physics"
+              value={department}
+              onChange={(event) => setDepartment(event.target.value)}
+              onBlur={() => setTouched((current) => ({ ...current, name: true }))}
+              autoComplete="organization-title"
+              aria-invalid={departmentValid === false}
+            />
+            {departmentValid === true && <Check className={`${styles.inputIconRight} ${styles.iconSuccess}`} size={18} />}
+          </div>
+          {departmentValid === false && touched.name && <span className={styles.errorMsg}>Please enter your university department</span>}
         </div>
 
         <div className={styles.formGroup}>

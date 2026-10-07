@@ -36,7 +36,7 @@ export interface WorkspaceState {
 }
 
 type WorkspaceAction =
-  | { type: 'OPEN_DOCUMENT'; documentId: string; document: CourseDocument }
+  | { type: 'OPEN_DOCUMENT'; documentId: string; document: CourseDocument; pageNumber?: number | null; anchorText?: string | null }
   | { type: 'SELECT_TEXT'; selection: DocumentSelection }
   | { type: 'CLEAR_SELECTION' }
   | { type: 'SET_NOTES_TAB'; tab: NotesChipTab }
@@ -81,6 +81,15 @@ function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): Works
   switch (action.type) {
     case 'OPEN_DOCUMENT': {
       const isNote = action.document.type === 'note';
+      // A deep link carries the page (and often the anchor text) it came from,
+      // so arriving from a card lands on the right place instead of page one.
+      const locateTarget: LocateTarget | null =
+        action.pageNumber || action.anchorText
+          ? {
+              anchorText: action.anchorText ?? '',
+              type: 'pin',
+            }
+          : null;
       return {
         ...state,
         activeDocumentId: action.documentId,
@@ -93,7 +102,7 @@ function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): Works
         selectedQuestionId: null,
         practice: null,
         splitMode: 'question_only',
-        locateTarget: null,
+        locateTarget,
         mobileView: 'document',
       };
     }
@@ -258,9 +267,22 @@ export function useWorkspaceState(
     return () => clearTimeout(timer);
   }, [state.locateTarget]);
 
-  const openDocument = useCallback((documentId: string, document: CourseDocument) => {
-    dispatch({ type: 'OPEN_DOCUMENT', documentId, document });
-  }, []);
+  const openDocument = useCallback(
+    (
+      documentId: string,
+      document: CourseDocument,
+      options?: { pageNumber?: number | null; anchorText?: string | null },
+    ) => {
+      dispatch({
+        type: 'OPEN_DOCUMENT',
+        documentId,
+        document,
+        pageNumber: options?.pageNumber ?? null,
+        anchorText: options?.anchorText ?? null,
+      });
+    },
+    [],
+  );
 
   const selectText = useCallback((selection: DocumentSelection) => {
     dispatch({ type: 'SELECT_TEXT', selection });

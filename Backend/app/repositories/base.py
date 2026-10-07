@@ -38,6 +38,16 @@ class BaseRepository(Generic[ModelType]):
         await self.session.refresh(db_obj)
         return db_obj
 
+    async def patch(self, db_obj: ModelType, update_data: dict[str, Any]) -> ModelType:
+        """Applies the given fields verbatim, including explicit ``None`` values."""
+        for field, value in update_data.items():
+            if hasattr(db_obj, field):
+                setattr(db_obj, field, value)
+        self.session.add(db_obj)
+        await self.session.flush()
+        await self.session.refresh(db_obj)
+        return db_obj
+
     async def delete(self, db_obj: ModelType) -> None:
         await self.session.delete(db_obj)
         await self.session.flush()

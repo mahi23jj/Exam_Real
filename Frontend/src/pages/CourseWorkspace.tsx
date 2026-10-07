@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
 import { getCourse } from '../services/courseService';
 import { fetchCourseDocuments } from '../services/documentService';
-import { Shimmer, ShimmerText } from '../components/ui/Shimmer';
+import { ShimmerText } from '../components/ui/Shimmer';
 import {
   fetchDocumentQuestions,
   fetchDocumentAnswerHistory,
@@ -28,6 +28,7 @@ import { mapPinFromApi, mapQuestionFromApi, PIN_TYPE_TO_API } from '../utils/soc
 import { syncUserWithBackend, type BackendUser } from '../services/authService';
 import { ACCESS_TOKEN_KEY } from '../services/apiClient';
 import { useWorkspaceState } from '../hooks/useWorkspaceState';
+import { readDeepLinkFromSearch } from '../utils/deepLinks';
 import type {
   PastExamDocument,
   ExamQuestion,
@@ -74,6 +75,7 @@ const MOCK_CHAT_HISTORY: ChatConversation[] = [
 const CourseWorkspace: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [courseData, setCourseData] = useState<ReturnType<typeof mapCourseToWorkspace> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -286,6 +288,63 @@ const CourseWorkspace: React.FC = () => {
       openDocument(targetId, doc);
     }
   }, [courseData, location.state, openDocument]);
+
+  // Deep links from the feed, a profile or the discussion modal arrive as
+  // ?document=...&page=...&target_id=... . Landing here with no matching
+  // document means the source is gone, so we stay on the explorer instead of
+  // opening a blank viewer.
+  const deepLinkConsumedRef = React.useRef(false);
+  useEffect(() => {
+    if (!courseData) return;
+    const link = readDeepLinkFromSearch(searchParams);
+    if (!link) {
+      deepLinkConsumedRef.current = false;
+      return;
+    }
+    if (deepLinkConsumedRef.current) return;
+
+    const doc = courseData.documents[link.documentId];
+    if (!doc) {
+      deepLinkConsumedRef.current = true;
+      toast.info('That document is no longer available.');
+      return;
+    }
+
+    deepLinkConsumedRef.current = true;
+
+    // Load the document's annotations first so the anchor text is available and
+    // the highlight lands on the actual passage the card was written about.
+    void (async () => {
+      await loadDocumentAnnotations(link.documentId);
+      let anchorText: string | null = null;
+      if (link.targetId) {
+        const loaded = await listPins({ document_id: link.documentId });
+        const questions = await listLearningQuestions({
+          document_id: link.documentId,
+        });
+        const pin = loaded.items.find((p) => p.id === link.targetId);
+        const question = questions.items.find((q) => q.id === link.targetId);
+        anchorText =
+          pin?.selected_text_snapshot ??
+          question?.selected_text_snapshot ??
+          pin?.source?.selected_text_snapshot ??
+          question?.source?.selected_text_snapshot ??
+          null;
+      }
+
+      openDocument(link.documentId, doc, {
+        pageNumber: link.pageNumber,
+        anchorText,
+      });
+
+      // A deep link can point at an exam question. That is the only case where
+      // target_id refers to an exam question rather than a content block, so it
+      // is the only case where the viewer should scroll to a question.
+      if (link.targetType === 'EXAM_QUESTION' && link.targetId) {
+        setJumpToQuestionId(link.targetId);
+      }
+    })();
+  }, [courseData, searchParams, loadDocumentAnnotations, openDocument]);
 
   const handlePinFromSelection = () => {
     dispatch({ type: 'SET_CONTEXT_MODE', mode: 'create_pin' });

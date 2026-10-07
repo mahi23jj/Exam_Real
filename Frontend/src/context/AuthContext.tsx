@@ -7,6 +7,8 @@
  *  - isLoading: boolean  (true while restoring session on mount)
  *  - login / signUp / loginWithGoogle / logout helpers
  *    that update state and redirect on success
+ *  - refreshUser / updateMyProfile so profile edits stay in sync with the
+ *    backend, which owns the authoritative name / department / picture
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
@@ -17,8 +19,10 @@ import {
   loginWithGoogle as googleLogin,
   logout as auth0Logout,
   restoreSession,
+  syncUserWithBackend,
+  updateMyProfile as apiUpdateMyProfile,
 } from '../services/authService';
-import type { BackendUser } from '../services/authService';
+import type { BackendUser, ProfileUpdateInput } from '../services/authService';
 
 
 // ── Context shape ─────────────────────────────────────────────────────────────
@@ -27,9 +31,11 @@ interface AuthContextValue {
   accessToken: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, fullName: string, password: string) => Promise<void>;
+  signUp: (email: string, fullName: string, password: string, department: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  updateMyProfile: (updates: ProfileUpdateInput) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -67,8 +73,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     navigate(POST_AUTH_ROUTE, { replace: true });
   }, [navigate]);
 
-  const signUp = useCallback(async (email: string, fullName: string, password: string) => {
-    const { user: backendUser, accessToken: token } = await signUpWithEmail(email, fullName, password);
+  const signUp = useCallback(async (email: string, fullName: string, password: string, department: string) => {
+    const { user: backendUser, accessToken: token } = await signUpWithEmail(email, fullName, password, department);
     setUser(backendUser);
     setAccessToken(token);
     localStorage.setItem('examreal_access_token', token);
@@ -90,10 +96,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await auth0Logout();
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    if (!accessToken) return;
+    const fresh = await syncUserWithBackend(accessToken);
+    setUser(fresh);
+  }, [accessToken]);
+
+  const updateMyProfile = useCallback(async (updates: ProfileUpdateInput) => {
+    if (!accessToken) {
+      throw new Error('You need to be signed in to edit your profile.');
+    }
+    const saved = await apiUpdateMyProfile(accessToken, updates);
+    setUser((prev) => (prev ? { ...prev, ...saved } : prev));
+  }, [accessToken]);
+
   // ── Value ────────────────────────────────────────────────────────────────────
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, isLoading, login, signUp, loginWithGoogle, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        accessToken,
+        isLoading,
+        login,
+        signUp,
+        loginWithGoogle,
+        logout,
+        refreshUser,
+        updateMyProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

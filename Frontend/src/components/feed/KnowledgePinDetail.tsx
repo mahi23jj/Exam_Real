@@ -1,6 +1,8 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import type { FeedPin } from './feedTypes';
 import type { PinType } from '../../types/workspace';
+import { publicProfilePath } from '../../utils/routes';
 import LikeButton from './LikeButton';
 import SaveButton from './SaveButton';
 import StudyInContextButton from './StudyInContextButton';
@@ -43,7 +45,16 @@ const KnowledgePinDetail: React.FC<KnowledgePinDetailProps> = ({ pin }) => {
           {pin.author.initials}
         </div>
         <div>
-          <p className="text-xs font-semibold text-stone-700">{pin.author.name}</p>
+          {publicProfilePath(pin.author.id) ? (
+            <Link
+              to={publicProfilePath(pin.author.id)!}
+              className="text-xs font-semibold text-stone-700 transition-colors hover:text-teal-700 hover:underline"
+            >
+              {pin.author.name}
+            </Link>
+          ) : (
+            <p className="text-xs font-semibold text-stone-700">{pin.author.name}</p>
+          )}
           {pin.author.department && (
             <p className="text-[10px] text-stone-400">{pin.author.department}</p>
           )}
@@ -72,13 +83,8 @@ const KnowledgePinDetail: React.FC<KnowledgePinDetailProps> = ({ pin }) => {
         <SaveButton saved={pin.saved} showLabel />
       </div>
 
-      {/* Study in Context */}
-      <StudyInContextButton
-        courseId={pin.courseId}
-        documentId={pin.documentId}
-        sectionId={pin.sectionId}
-        highlightText={pin.anchorText}
-      />
+      {/* Study in Context — only rendered when a real destination resolved */}
+      <StudyInContextButton source={pin.source} />
     </div>
   );
 };

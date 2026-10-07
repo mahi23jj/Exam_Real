@@ -1,240 +1,292 @@
-import React, { useState } from 'react';
-import { BookOpen, Pin, MessageCircle, Heart, Lock, Calendar, Bookmark } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useMemo, useState } from 'react';
+import { ArrowLeft, BookOpen } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+
 import ProfileHeader from '../components/profile/ProfileHeader';
 import type { UserProfileData } from '../components/profile/ProfileHeader';
+import ProfileEditor from '../components/profile/ProfileEditor';
 import StatsCards from '../components/profile/StatsCards';
 import type { ProfileStats } from '../components/profile/StatsCards';
 import Tabs, { type TabItem } from '../components/ui/Tabs';
+import EmptyState from '../components/community/EmptyState';
+import ContentCard from '../components/community/ContentCard';
+import FeedContextPanel from '../components/feed/FeedContextPanel';
 import AppLayout from '../components/layout/AppLayout';
+import type { FeedAuthor, FeedItem, FeedQuestion } from '../components/feed/feedTypes';
+import { mapPinToCard, mapQuestionToCard } from '../utils/socialMappers';
+import { getCommunityProfile } from '../services/socialService';
+import { useAuth } from '../context/AuthContext';
 
-// --- MOCK DATA ---
-const MOCK_USER: UserProfileData = {
-  id: '1',
-  name: 'Mahlet Solomon',
-  initials: 'MS',
-  department: 'Software Engineering',
-  university: 'AASTU',
-  bio: 'Passionate about teaching and building study tools.',
-  interests: ['Operating Systems', 'Database Systems', 'AI', 'Distributed Systems'],
-  isFollowing: false,
-};
+const PostsContent: React.FC<{
+  items: FeedItem[];
+  emptyTitle: string;
+  emptySubtitle: string;
+  onOpenDiscussion: (question: FeedQuestion) => void;
+}> = ({ items, emptyTitle, emptySubtitle, onOpenDiscussion }) => {
+  if (items.length === 0) {
+    return <EmptyState title={emptyTitle} subtitle={emptySubtitle} />;
+  }
 
-const MOCK_STATS: ProfileStats = {
-  courses: 8,
-  pins: 42,
-  questions: 15,
-  saved: 24,
-};
-
-type ProfileTabId = 'courses' | 'pins' | 'questions' | 'saved' | 'about';
-
-// Mock content components per tab
-const CoursesContent = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-    {[
-      { title: 'Operating Systems', notes: 12, exams: 8, age: '3 months ago' },
-      { title: 'Database Systems', notes: 9, exams: 5, age: '1 month ago' },
-    ].map((c, i) => (
-      <motion.div
-        key={i}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: i * 0.06 }}
-        className="p-5 bg-white rounded-2xl border border-stone-200/40 premium-shadow hover:-translate-y-1 transition-all duration-300 cursor-pointer group"
-      >
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center">
-            <BookOpen size={16} />
-          </div>
-          <h3 className="text-[16px] font-bold text-stone-800 group-hover:text-teal-700 transition-colors">
-            {c.title}
-          </h3>
-        </div>
-        <div className="flex items-center gap-4 text-[13px] text-stone-500 mb-3">
-          <span className="flex items-center gap-1.5"><Calendar size={13} /> {c.notes} Notes</span>
-          <span className="flex items-center gap-1.5"><MessageCircle size={13} /> {c.exams} Past Exams</span>
-        </div>
-        <div className="text-[12px] text-stone-400 font-medium">Created {c.age}</div>
-      </motion.div>
-    ))}
-  </div>
-);
-
-const PinsContent = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-    {[
-      { label: 'Memory Trick', body: '"Virtual memory uses disk space as extension of RAM"', course: 'Operating Systems', time: '2h ago', likes: 18, replies: 5 },
-      { label: 'Scheduling Rule', body: '"FCFS can cause convoy effect with long-running processes"', course: 'Operating Systems', time: '1d ago', likes: 12, replies: 2 },
-    ].map((p, i) => (
-      <motion.div
-        key={i}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: i * 0.06 }}
-        className="p-5 bg-white rounded-2xl border border-stone-200/40 premium-shadow hover:-translate-y-1 transition-all duration-300 cursor-pointer group"
-      >
-        <div className="flex items-center gap-2 mb-2 text-teal-700">
-          <Pin size={15} />
-          <span className="text-[14px] font-bold">{p.label}</span>
-        </div>
-        <p className="text-[14px] text-stone-700 mb-4 leading-relaxed">{p.body}</p>
-        <div className="flex items-center justify-between pt-2 border-t border-stone-100">
-          <span className="text-[12px] text-stone-400 font-medium">{p.course} &middot; {p.time}</span>
-          <div className="flex items-center gap-3 text-[12px] text-stone-400">
-            <span className="flex items-center gap-1"><Heart size={13} /> {p.likes}</span>
-            <span className="flex items-center gap-1"><MessageCircle size={13} /> {p.replies}</span>
-          </div>
-        </div>
-      </motion.div>
-    ))}
-  </div>
-);
-
-const QuestionsContent = () => (
-  <div className="flex flex-col gap-4">
-    {[
-      { q: 'Why is virtual memory important for modern OS?', course: 'Operating Systems', time: '2h ago', replies: 12 },
-      { q: 'What is the difference between mutex and semaphore?', course: 'Operating Systems', time: '3d ago', replies: 7 },
-    ].map((item, i) => (
-      <motion.div
-        key={i}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: i * 0.06 }}
-        className="p-5 bg-white rounded-2xl border border-stone-200/40 premium-shadow hover:-translate-y-1 transition-all duration-300 cursor-pointer group"
-      >
-        <h3 className="text-[15px] font-bold text-stone-800 mb-3 flex items-start gap-2 group-hover:text-teal-700 transition-colors">
-          <MessageCircle size={17} className="mt-0.5 shrink-0 text-teal-700" />
-          {item.q}
-        </h3>
-        <div className="flex items-center justify-between">
-          <span className="text-[13px] text-stone-400 font-medium">{item.course} &middot; {item.time}</span>
-          <span className="text-[13px] font-bold text-teal-700 bg-teal-50 px-3 py-1 rounded-xl">
-            {item.replies} replies
-          </span>
-        </div>
-      </motion.div>
-    ))}
-  </div>
-);
-
-const SavedContent = ({ subTab, onSubTab }: { subTab: 'pins' | 'questions'; onSubTab: (v: 'pins' | 'questions') => void }) => (
-  <div>
-    <div className="flex items-center gap-2 text-[13px] font-bold text-amber-700 bg-amber-50 px-4 py-2.5 rounded-xl mb-6 border border-amber-200/50">
-      <Lock size={14} />
-      Private — Only visible to you
-    </div>
-    <div className="flex items-center gap-1 mb-6 p-1 bg-stone-100/50 rounded-xl w-fit">
-      {(['pins', 'questions'] as const).map(tab => (
-        <button
-          key={tab}
-          onClick={() => onSubTab(tab)}
-          className={`px-4 py-2 rounded-lg text-[13px] font-bold transition-all duration-200 capitalize ${
-            subTab === tab ? 'bg-white text-stone-800 premium-shadow' : 'text-stone-500 hover:text-stone-700'
-          }`}
+  return (
+    <div className="space-y-3">
+      {items.map((item, index) => (
+        <motion.div
+          key={item.id}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.04 }}
         >
-          {tab === 'pins' ? 'Knowledge Pins' : 'Questions'}
-        </button>
+          <ContentCard item={item} onOpenDiscussion={onOpenDiscussion} />
+        </motion.div>
       ))}
     </div>
-    <div className="text-center py-16 text-stone-400">
-      {subTab === 'pins' ? <Pin size={36} className="mx-auto mb-4 opacity-30" /> : <MessageCircle size={36} className="mx-auto mb-4 opacity-30" />}
-      <p className="text-[14px] font-medium">Nothing saved here yet.</p>
-    </div>
-  </div>
-);
+  );
+};
 
-const AboutContent = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-12 py-4">
-    {[
-      { label: 'University', value: 'Addis Ababa Science & Technology University' },
-      { label: 'Department', value: 'Software Engineering' },
-      { label: 'Year', value: '3rd Year' },
-      { label: 'Interests', value: 'Operating Systems, AI, Distributed Systems' },
-    ].map((item) => (
-      <div key={item.label} className="flex flex-col gap-1.5">
-        <span className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">{item.label}</span>
-        <span className="text-[15px] font-semibold text-stone-800">{item.value}</span>
-      </div>
-    ))}
-    <div className="flex flex-col gap-1.5 md:col-span-2 mt-4 pt-6 border-t border-stone-100">
-      <span className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">Bio</span>
-      <p className="text-[15px] text-stone-700 leading-relaxed max-w-2xl">
-        {MOCK_USER.bio}
-      </p>
+type ProfileTabId = 'courses' | 'pins' | 'questions';
+
+const PAGE_SIZE = 10;
+
+const CoursesContent = ({
+  courses,
+}: {
+  courses: { id: string; title: string; code?: string | null; category?: string | null }[];
+}) => {
+  if (courses.length === 0) {
+    return <EmptyState title="No courses yet" subtitle="Courses this student follows or created show up here." />;
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {courses.map((course, index) => (
+        <motion.div
+          key={course.id}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.06 }}
+          className="p-5 bg-white rounded-2xl border border-stone-200/40 premium-shadow hover:-translate-y-1 transition-all duration-300 group"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+              <BookOpen size={16} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-[16px] font-bold text-stone-800 truncate">{course.title}</h3>
+              <p className="text-[12px] text-stone-400 font-medium truncate">
+                {course.code || course.category || 'Course'}
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      ))}
     </div>
-  </div>
-);
+  );
+};
+
 
 const Profile = () => {
+  const { userId } = useParams<{ userId: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user: currentUser } = useAuth();
+  const [page, setPage] = useState(1);
   const [activeTab, setActiveTab] = useState<ProfileTabId>('courses');
-  const [savedSubTab, setSavedSubTab] = useState<'pins' | 'questions'>('pins');
+  const [discussion, setDiscussion] = useState<FeedQuestion | null>(null);
+
+  const effectiveUserId = userId ?? currentUser?.id;
+  const isOwnProfile = Boolean(currentUser && effectiveUserId === currentUser.id);
+
+  // Arriving from another in-app screen means "back" should return there.
+  // A hard refresh or a pasted link has no internal history to restore.
+  const canGoBack = Boolean(location.key) && location.key !== 'default';
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['community', 'profile', effectiveUserId, page],
+    queryFn: () => getCommunityProfile(effectiveUserId as string, page, PAGE_SIZE),
+    enabled: Boolean(effectiveUserId),
+  });
+
+  // The profile endpoint returns the same pin/question payloads the feed uses,
+  // so both render through the shared card. These must stay above the early
+  // return below to keep hook order stable across renders.
+  const profileAuthor: FeedAuthor = useMemo(() => {
+    const name = data?.user.full_name?.trim() || 'Unnamed student';
+    return {
+      id: data?.user.id ?? effectiveUserId ?? '',
+      name,
+      initials: name
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() ?? '')
+        .join(''),
+      department: data?.user.department ?? undefined,
+    };
+  }, [data?.user, effectiveUserId]);
+
+  const pinCards = useMemo(
+    () => (data?.public_pins ?? []).map((pin) => mapPinToCard(pin, profileAuthor)),
+    [data?.public_pins, profileAuthor],
+  );
+
+  const questionCards = useMemo(
+    () =>
+      (data?.public_questions ?? []).map((question) =>
+        mapQuestionToCard(question, profileAuthor, question.answers_count),
+      ),
+    [data?.public_questions, profileAuthor],
+  );
+
+  if (!effectiveUserId) {
+    return (
+      <AppLayout activePage="Profile">
+        <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-10">
+          <EmptyState
+            title="Sign in to view profiles"
+            subtitle="You need an account to see student profiles."
+            actionLabel="Go to courses"
+            onAction={() => navigate('/courses')}
+          />
+        </main>
+      </AppLayout>
+    );
+  }
+
+  const displayName = data?.user.full_name?.trim() || 'Unnamed student';
+  const profileUser: UserProfileData = {
+    id: data?.user.id ?? effectiveUserId,
+    name: isOwnProfile && currentUser?.full_name ? currentUser.full_name : displayName,
+    picture: data?.user.picture ?? null,
+    department: isOwnProfile && currentUser?.department ? currentUser.department : data?.user.department ?? null,
+    email: currentUser?.email ?? null,
+    isFollowing: data?.is_following_user ?? false,
+    isSelf: isOwnProfile || (data?.relationship.is_self ?? false),
+    followersCount: data?.stats.followers_count ?? 0,
+    followingCount: data?.stats.following_users_count ?? 0,
+  };
+
+  const profileStats: ProfileStats = {
+    courses: data?.courses.length ?? 0,
+    pins: data?.stats.total_pins ?? 0,
+    questions: data?.stats.total_questions ?? 0,
+    answers: data?.stats.total_answers ?? 0,
+    helpful: data?.stats.total_helpful_contributions ?? 0,
+  };
+
+  const totalPages = Math.max(
+    Math.ceil((data?.pins_total ?? 0) / PAGE_SIZE),
+    Math.ceil((data?.questions_total ?? 0) / PAGE_SIZE),
+    1,
+  );
 
   const tabsItems: TabItem<ProfileTabId>[] = [
-    { id: 'courses', label: 'Courses', count: 8 },
-    { id: 'pins', label: 'Knowledge Pins', count: 42 },
-    { id: 'questions', label: 'Questions', count: 15 },
-    { id: 'saved', label: 'Saved', count: 24 },
-    { id: 'about', label: 'About' },
+    { id: 'courses', label: 'Courses', count: data?.courses.length },
+    { id: 'pins', label: 'Pins', count: data?.stats.total_pins },
+    { id: 'questions', label: 'Questions', count: data?.stats.total_questions },
   ];
+
 
   return (
     <AppLayout activePage="Profile">
-      {/* Fixed top header */}
-      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-stone-200/50">
-        <div className="max-w-7xl mx-auto px-6 lg:px-10 py-4 flex items-center justify-between gap-6">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-teal-700">Profile</p>
-            <h1 className="text-base font-semibold text-stone-800">{MOCK_USER.name}</h1>
+      <main className="flex-1 max-w-5xl mx-auto w-full px-6 lg:px-8 py-10 space-y-8">
+        {isError ? (
+          <EmptyState
+            title="Could not load this profile"
+            subtitle={error instanceof Error ? error.message : 'Please try again.'}
+          />
+        ) : isLoading ? (
+          <div className="space-y-6">
+            <div className="h-40 rounded-2xl bg-stone-100/60 animate-pulse" />
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="h-28 rounded-2xl bg-stone-100/60 animate-pulse" />
+              ))}
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-2xl bg-stone-200 border-2 border-white premium-shadow flex items-center justify-center text-xs font-bold text-stone-600">
-            AL
-          </div>
-        </div>
-      </header>
+        ) : (
+          <>
+            <ProfileHeader user={profileUser} />
+            {canGoBack && (
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="flex items-center gap-1.5 text-[13px] font-semibold text-stone-500 transition-colors hover:text-teal-700"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+            )}
+            {isOwnProfile && <ProfileEditor />}
+            <StatsCards stats={profileStats} />
 
-      {/* Scrollable page body */}
-      <div className="flex-1 max-w-7xl mx-auto w-full px-6 lg:px-10 py-10 flex flex-col gap-8">
+            <div>
+              <Tabs
+                activeTab={activeTab}
+                onChange={(tab) => {
+                  setActiveTab(tab);
+                  setPage(1);
+                }}
+                tabs={tabsItems}
+                layoutId="profileTabs"
+              />
 
-        {/* Profile Header Card */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <ProfileHeader user={MOCK_USER} />
-        </motion.div>
+              <div className="mt-6">
+                {activeTab === 'courses' && <CoursesContent courses={data?.courses ?? []} />}
+                {activeTab === 'pins' && (
+                  <PostsContent
+                    items={pinCards}
+                    emptyTitle={isOwnProfile ? 'No pins yet' : 'No public pins'}
+                    emptySubtitle={
+                      isOwnProfile
+                        ? 'Pins you share publicly will appear here.'
+                        : 'Public Knowledge Pins shared by this student appear here.'
+                    }
+                    onOpenDiscussion={setDiscussion}
+                  />
+                )}
+                {activeTab === 'questions' && (
+                  <PostsContent
+                    items={questionCards}
+                    emptyTitle={isOwnProfile ? 'No questions yet' : 'No public questions'}
+                    emptySubtitle={
+                      isOwnProfile
+                        ? 'Questions you ask will appear here.'
+                        : 'Public questions asked by this student appear here.'
+                    }
+                    onOpenDiscussion={setDiscussion}
+                  />
+                )}
+              </div>
 
-        {/* Stats Row */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
-          <StatsCards stats={MOCK_STATS} />
-        </motion.div>
-
-        {/* Tabs */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.14 }}
-          className="flex items-center overflow-x-auto no-scrollbar"
-        >
-          <Tabs activeTab={activeTab} onChange={setActiveTab} tabs={tabsItems} layoutId="profileTabs" />
-        </motion.div>
-
-        {/* Tab Content — AnimatePresence like Courses.tsx */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.25 }}
-            className="bg-white rounded-2xl border border-stone-200/40 premium-shadow p-6 min-h-[400px]"
-          >
-            {activeTab === 'courses' && <CoursesContent />}
-            {activeTab === 'pins' && <PinsContent />}
-            {activeTab === 'questions' && <QuestionsContent />}
-            {activeTab === 'saved' && <SavedContent subTab={savedSubTab} onSubTab={setSavedSubTab} />}
-            {activeTab === 'about' && <AboutContent />}
-          </motion.div>
-        </AnimatePresence>
-      </div>
+              {activeTab !== 'courses' && totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 mt-10">
+                  <button
+                    type="button"
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    disabled={page <= 1}
+                    className="h-10 px-4 rounded-2xl border border-stone-200 text-[14px] font-semibold text-stone-600 disabled:opacity-40 hover:bg-stone-50 transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-[14px] text-stone-500 font-medium">
+                    Page {data?.page ?? page} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPage((current) => current + 1)}
+                    disabled={page >= totalPages}
+                    className="h-10 px-4 rounded-2xl border border-stone-200 text-[14px] font-semibold text-stone-600 disabled:opacity-40 hover:bg-stone-50 transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </main>
+      <FeedContextPanel item={discussion} onClose={() => setDiscussion(null)} />
     </AppLayout>
   );
 };

@@ -39,6 +39,31 @@ class CourseRepository(BaseRepository[Course]):
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
+    async def list_courses(
+        self,
+        skip: int = 0,
+        limit: int = 20,
+        search: Optional[str] = None,
+    ) -> Tuple[List[Course], int]:
+        """Plain paginated list of active courses (used by ``GET /courses``)."""
+        statement = (
+            select(Course)
+            .options(selectinload(Course.created_by))
+            .where(Course.is_active == True)
+        )
+        if search:
+            pattern = f"%{search.strip()}%"
+            statement = statement.where(
+                or_(Course.title.ilike(pattern), Course.code.ilike(pattern))
+            )
+
+        count_stmt = select(func.count()).select_from(statement.order_by(None).subquery())
+        total = (await self.session.execute(count_stmt)).scalar_one() or 0
+
+        statement = statement.order_by(Course.created_at.desc()).offset(skip).limit(limit)
+        courses = list((await self.session.execute(statement)).scalars().all())
+        return courses, total
+
     async def list_explore_courses(
         self,
         skip: int = 0,
@@ -300,7 +325,9 @@ class CourseRepository(BaseRepository[Course]):
         for c in courses:
             creator_data = {
                 "id": c.created_by.id if c.created_by else c.created_by_user_id,
-                "full_name": c.created_by.full_name if c.created_by else "Unknown"
+                # Never surface a placeholder name; User.display_name() falls
+                # back to the email local part.
+                "full_name": c.created_by.display_name() if c.created_by else "ExamReal Student"
             }
             stats_data = {
                 "followers_count": followers_map.get(c.id, 0),

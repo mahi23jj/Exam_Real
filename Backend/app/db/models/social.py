@@ -2,7 +2,7 @@ import enum
 import uuid
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel, JSON, Column
-from sqlalchemy import Text
+from sqlalchemy import Text, UniqueConstraint
 
 from app.db.base import TimestampMixin, generate_uuid
 
@@ -55,6 +55,17 @@ class ReactionType(str, enum.Enum):
 
 class Reaction(TimestampMixin, table=True):
     __tablename__ = "reactions"
+    __table_args__ = (
+        # One reaction of a given type per user per target. Without this a
+        # double-tap could store two likes and inflate the counter.
+        UniqueConstraint(
+            "user_id",
+            "target_type",
+            "target_id",
+            "reaction_type",
+            name="uq_reactions_user_target_type",
+        ),
+    )
 
     id: uuid.UUID = Field(default_factory=generate_uuid, primary_key=True, index=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", index=True, nullable=False)
@@ -68,6 +79,15 @@ class Reaction(TimestampMixin, table=True):
 
 class SavedItem(TimestampMixin, table=True):
     __tablename__ = "saved_items"
+    __table_args__ = (
+        # One save per user per target, so saves cannot accumulate duplicates.
+        UniqueConstraint(
+            "user_id",
+            "target_type",
+            "target_id",
+            name="uq_saved_items_user_target",
+        ),
+    )
 
     id: uuid.UUID = Field(default_factory=generate_uuid, primary_key=True, index=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", index=True, nullable=False)
@@ -106,6 +126,10 @@ class KnowledgePin(TimestampMixin, table=True):
     saves_count: int = Field(default=0, nullable=False)
     reports_count: int = Field(default=0, nullable=False)
     is_active: bool = Field(default=True, nullable=False)
+
+    # Relationships
+    author: Optional["User"] = Relationship()
+    document: Optional["Document"] = Relationship()
 
 class QuestionStatus(str, enum.Enum):
     OPEN = "OPEN"
@@ -176,6 +200,14 @@ class QuestionReply(TimestampMixin, table=True):
 
 class Follow(TimestampMixin, table=True):
     __tablename__ = "follows"
+    __table_args__ = (
+        UniqueConstraint(
+            "follower_id",
+            "target_type",
+            "target_id",
+            name="uq_follows_follower_target",
+        ),
+    )
 
     id: uuid.UUID = Field(default_factory=generate_uuid, primary_key=True, index=True)
     follower_id: uuid.UUID = Field(foreign_key="users.id", index=True, nullable=False)

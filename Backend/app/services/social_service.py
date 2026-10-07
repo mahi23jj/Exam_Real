@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Any, Optional, List, Tuple, Dict
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,7 @@ from app.repositories.social_repository import (
     UserActivityRepository,
 )
 from app.repositories.user_repository import UserRepository
+from app.repositories.community_repository import CommunityRepository
 from app.repositories.document_repository import DocumentRepository
 from app.schemas.social import (
     KnowledgePinCreate,
@@ -48,15 +50,111 @@ from app.schemas.social import (
     QuestionReplyRead,
     QuestionReplyTreeResponse,
     FollowToggleResponse,
+    FollowUserResponse,
+    FollowStateRead,
+    FollowUserSummary,
+    FollowUserListResponse,
+    AuthorRelationshipRead,
+    SharedCourseRead,
+    ProfileCourseRead,
+    RecommendedUserRead,
+    RecommendedUserListResponse,
     CommunityStatsRead,
     CommunityProfileRead,
     UserSummary,
     UserActivityRead,
     FeedResponse,
+    FeedItemRead,
+    FeedPageResponse,
+    FeedScope,
+    FeedContentType,
     CommunityContextRequest,
     CommunityContextResponse,
 )
+from app.repositories.feed_repository import (
+    FeedRepository,
+    SOURCE_PIN,
+    SOURCE_QUESTION,
+)
+from app.services.source_resolver import attach_sources, resolve_sources
 
+
+
+async def _toggle_like(
+    reaction_repo: ReactionRepository,
+    user_id: uuid.UUID,
+    target_type: TargetType,
+    target_id: uuid.UUID,
+) -> Tuple[bool, int]:
+    """Flips a user's like and returns ``(is_reacted, authoritative_count)``.
+
+    The write is decided by the unique constraint rather than a prior SELECT, so
+    simultaneous taps cannot create duplicate likes. The count is then read back
+    from the reaction rows, so the denormalised column can never drift.
+    """
+    if await reaction_repo.remove_reaction(user_id, target_type, target_id):
+        is_reacted = False
+    else:
+        is_reacted = await reaction_repo.add_reaction_if_absent(user_id, target_type, target_id)
+
+    count = await reaction_repo.count_reactions(target_type, target_id)
+    return is_reacted, count
+
+
+async def _toggle_save(
+    save_repo: SavedItemRepository,
+    user_id: uuid.UUID,
+    target_type: TargetType,
+    target_id: uuid.UUID,
+) -> Tuple[bool, int]:
+    """Flips a user's save and returns ``(is_saved, authoritative_count)``."""
+    if await save_repo.remove_save(user_id, target_type, target_id):
+        is_saved = False
+    else:
+        is_saved = await save_repo.add_save_if_absent(user_id, target_type, target_id)
+
+    count = await save_repo.count_saves(target_type, target_id)
+    return is_saved, count
+
+
+async def _resolve_author_relationships(
+    follow_repo: FollowRepository,
+    author_ids: List[uuid.UUID],
+    viewer_id: uuid.UUID
+) -> Dict[uuid.UUID, AuthorRelationshipRead]:
+    """Resolves viewer follow state for many content authors with a single query.
+
+    Authors are eager-loaded by the repositories, so a page of 30 pins/questions
+    costs one extra query instead of one per item (no N+1).
+    """
+    unique_ids = list({a for a in author_ids if a})
+    if not unique_ids:
+        return {}
+
+    followed = await follow_repo.get_followed_target_ids_batch(
+        follower_id=viewer_id,
+        target_type=TargetType.USER,
+        target_ids=unique_ids
+    )
+    return {
+        author_id: AuthorRelationshipRead(
+            is_following=author_id in followed,
+            is_self=author_id == viewer_id,
+        )
+        for author_id in unique_ids
+    }
+
+
+def public_author_summary(user: Optional[User]) -> Optional[UserSummary]:
+    """Author payload safe for other students (no email, never a placeholder)."""
+    if user is None:
+        return None
+    return UserSummary(
+        id=user.id,
+        full_name=user.display_name(),
+        picture=user.picture,
+        department=user.department,
+    )
 
 
 class KnowledgePinService:
@@ -66,6 +164,14 @@ class KnowledgePinService:
         self.doc_repo = DocumentRepository(session)
         self.reaction_repo = ReactionRepository(session)
         self.save_repo = SavedItemRepository(session)
+        self.follow_repo = FollowRepository(session)
+
+    async def _author_relationships(
+        self,
+        author_ids: List[uuid.UUID],
+        viewer_id: uuid.UUID
+    ) -> Dict[uuid.UUID, AuthorRelationshipRead]:
+        return await _resolve_author_relationships(self.follow_repo, author_ids, viewer_id)
 
     async def create_pin(self, pin_in: KnowledgePinCreate, current_user: User) -> KnowledgePin:
         # Verify document exists
@@ -110,7 +216,14 @@ class KnowledgePinService:
             )
 
         pin_dto = KnowledgePinRead.model_validate(pin)
+        pin_dto.author = public_author_summary(pin.author)
+        pin_dto.source = (await resolve_sources(self.session, [pin])).get(pin.id)
         if current_user:
+            relationships = await self._author_relationships([pin.author_id], current_user.id)
+            pin_dto.relationship = relationships.get(
+                pin.author_id,
+                AuthorRelationshipRead(is_following=False, is_self=False),
+            )
             user_reaction = await self.reaction_repo.get_user_reaction(
                 user_id=current_user.id,
                 target_type=TargetType.PIN,
@@ -157,6 +270,9 @@ class KnowledgePinService:
         pin_dtos: List[KnowledgePinRead] = []
         if viewer_id and pins:
             pin_ids = [p.id for p in pins]
+            relationships = await self._author_relationships(
+                [p.author_id for p in pins], viewer_id
+            )
             user_reactions = await self.reaction_repo.get_user_reactions_for_targets(
                 user_id=viewer_id,
                 target_type=TargetType.PIN,
@@ -172,11 +288,22 @@ class KnowledgePinService:
 
             for p in pins:
                 dto = KnowledgePinRead.model_validate(p)
+                dto.author = public_author_summary(p.author)
+                dto.relationship = relationships.get(
+                    p.author_id,
+                    AuthorRelationshipRead(is_following=False, is_self=False),
+                )
                 dto.is_liked_by_me = p.id in liked_pin_ids
                 dto.is_saved_by_me = p.id in saved_pin_ids
                 pin_dtos.append(dto)
         else:
-            pin_dtos = [KnowledgePinRead.model_validate(p) for p in pins]
+            for p in pins:
+                dto = KnowledgePinRead.model_validate(p)
+                dto.author = public_author_summary(p.author)
+                pin_dtos.append(dto)
+
+        # One extra query resolves the whole page's deep links.
+        await attach_sources(self.session, pins, pin_dtos)
 
         return KnowledgePinListResponse(
             items=pin_dtos,
@@ -222,6 +349,10 @@ class KnowledgePinService:
             )
 
         await self.pin_repo.update(pin, {"is_active": False})
+        # Reaction/save rows are polymorphic, so nothing cascades for us; drop
+        # them explicitly or they linger against a deleted pin indefinitely.
+        await self.reaction_repo.delete_for_target(TargetType.PIN, pin.id)
+        await self.save_repo.delete_for_target(TargetType.PIN, pin.id)
 
     async def toggle_like(
         self,
@@ -235,37 +366,18 @@ class KnowledgePinService:
                 detail="Knowledge pin not found."
             )
 
-        existing_reaction = await self.reaction_repo.get_user_reaction(
-            user_id=current_user.id,
-            target_type=TargetType.PIN,
-            target_id=pin_id,
-            reaction_type=ReactionType.LIKE
+        is_reacted, new_count = await _toggle_like(
+            self.reaction_repo,
+            current_user.id,
+            TargetType.PIN,
+            pin_id,
         )
-
-        if existing_reaction:
-            await self.reaction_repo.delete(existing_reaction)
-            new_count = max(0, pin.likes_count - 1)
-            await self.pin_repo.update(pin, {"likes_count": new_count})
-            return ReactionToggleResponse(
-                is_reacted=False,
-                reaction_type=ReactionType.LIKE,
-                new_count=new_count
-            )
-        else:
-            reaction = Reaction(
-                user_id=current_user.id,
-                target_type=TargetType.PIN,
-                target_id=pin_id,
-                reaction_type=ReactionType.LIKE
-            )
-            await self.reaction_repo.create(reaction)
-            new_count = pin.likes_count + 1
-            await self.pin_repo.update(pin, {"likes_count": new_count})
-            return ReactionToggleResponse(
-                is_reacted=True,
-                reaction_type=ReactionType.LIKE,
-                new_count=new_count
-            )
+        await self.pin_repo.patch(pin, {"likes_count": new_count})
+        return ReactionToggleResponse(
+            is_reacted=is_reacted,
+            reaction_type=ReactionType.LIKE,
+            new_count=new_count,
+        )
 
     async def toggle_save(
         self,
@@ -279,27 +391,14 @@ class KnowledgePinService:
                 detail="Knowledge pin not found."
             )
 
-        existing_save = await self.save_repo.get_user_saved_item(
-            user_id=current_user.id,
-            target_type=TargetType.PIN,
-            target_id=pin_id
+        is_saved, new_count = await _toggle_save(
+            self.save_repo,
+            current_user.id,
+            TargetType.PIN,
+            pin_id,
         )
-
-        if existing_save:
-            await self.save_repo.delete(existing_save)
-            new_count = max(0, pin.saves_count - 1)
-            await self.pin_repo.update(pin, {"saves_count": new_count})
-            return SavedItemToggleResponse(is_saved=False, new_count=new_count)
-        else:
-            saved_item = SavedItem(
-                user_id=current_user.id,
-                target_type=TargetType.PIN,
-                target_id=pin_id
-            )
-            await self.save_repo.create(saved_item)
-            new_count = pin.saves_count + 1
-            await self.pin_repo.update(pin, {"saves_count": new_count})
-            return SavedItemToggleResponse(is_saved=True, new_count=new_count)
+        await self.pin_repo.patch(pin, {"saves_count": new_count})
+        return SavedItemToggleResponse(is_saved=is_saved, new_count=new_count)
 
 
 # =========================================================
@@ -313,6 +412,14 @@ class LearningQuestionService:
         self.doc_repo = DocumentRepository(session)
         self.reaction_repo = ReactionRepository(session)
         self.save_repo = SavedItemRepository(session)
+        self.follow_repo = FollowRepository(session)
+
+    async def _author_relationships(
+        self,
+        author_ids: List[uuid.UUID],
+        viewer_id: uuid.UUID
+    ) -> Dict[uuid.UUID, AuthorRelationshipRead]:
+        return await _resolve_author_relationships(self.follow_repo, author_ids, viewer_id)
 
     async def create_question(self, question_in: LearningQuestionCreate, current_user: User) -> LearningQuestion:
         doc = await self.doc_repo.get_by_id(question_in.document_id)
@@ -358,7 +465,16 @@ class LearningQuestionService:
         await self.question_repo.update(question, {"views_count": question.views_count + 1})
 
         dto = LearningQuestionRead.model_validate(question)
+        dto.author = public_author_summary(question.author)
+        dto.source = (await resolve_sources(self.session, [question])).get(question.id)
         if current_user:
+            relationships = await self._author_relationships(
+                [question.author_id], current_user.id
+            )
+            dto.relationship = relationships.get(
+                question.author_id,
+                AuthorRelationshipRead(is_following=False, is_self=False),
+            )
             user_reaction = await self.reaction_repo.get_user_reaction(
                 user_id=current_user.id,
                 target_type=TargetType.QUESTION,
@@ -405,6 +521,9 @@ class LearningQuestionService:
         dtos: List[LearningQuestionRead] = []
         if viewer_id and questions:
             q_ids = [q.id for q in questions]
+            relationships = await self._author_relationships(
+                [q.author_id for q in questions], viewer_id
+            )
             user_reactions = await self.reaction_repo.get_user_reactions_for_targets(
                 user_id=viewer_id,
                 target_type=TargetType.QUESTION,
@@ -420,11 +539,22 @@ class LearningQuestionService:
 
             for q in questions:
                 d = LearningQuestionRead.model_validate(q)
+                d.author = public_author_summary(q.author)
+                d.relationship = relationships.get(
+                    q.author_id,
+                    AuthorRelationshipRead(is_following=False, is_self=False),
+                )
                 d.is_liked_by_me = q.id in liked_ids
                 d.is_saved_by_me = q.id in saved_ids
                 dtos.append(d)
         else:
-            dtos = [LearningQuestionRead.model_validate(q) for q in questions]
+            for q in questions:
+                d = LearningQuestionRead.model_validate(q)
+                d.author = public_author_summary(q.author)
+                dtos.append(d)
+
+        # One extra query resolves the whole page's deep links.
+        await attach_sources(self.session, questions, dtos)
 
         return LearningQuestionListResponse(
             items=dtos,
@@ -470,53 +600,38 @@ class LearningQuestionService:
             )
 
         await self.question_repo.update(question, {"is_active": False})
+        await self.reaction_repo.delete_for_target(TargetType.QUESTION, question.id)
+        await self.save_repo.delete_for_target(TargetType.QUESTION, question.id)
 
     async def toggle_like(self, question_id: uuid.UUID, current_user: User) -> ReactionToggleResponse:
         question = await self.question_repo.get_by_id(question_id)
         if not question or not question.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found.")
 
-        existing = await self.reaction_repo.get_user_reaction(
-            user_id=current_user.id,
-            target_type=TargetType.QUESTION,
-            target_id=question_id,
-            reaction_type=ReactionType.LIKE
+        is_reacted, new_count = await _toggle_like(
+            self.reaction_repo,
+            current_user.id,
+            TargetType.QUESTION,
+            question_id,
         )
-
-        if existing:
-            await self.reaction_repo.delete(existing)
-            new_count = max(0, question.likes_count - 1)
-            await self.question_repo.update(question, {"likes_count": new_count})
-            return ReactionToggleResponse(is_reacted=False, reaction_type=ReactionType.LIKE, new_count=new_count)
-        else:
-            rx = Reaction(user_id=current_user.id, target_type=TargetType.QUESTION, target_id=question_id, reaction_type=ReactionType.LIKE)
-            await self.reaction_repo.create(rx)
-            new_count = question.likes_count + 1
-            await self.question_repo.update(question, {"likes_count": new_count})
-            return ReactionToggleResponse(is_reacted=True, reaction_type=ReactionType.LIKE, new_count=new_count)
+        await self.question_repo.patch(question, {"likes_count": new_count})
+        return ReactionToggleResponse(
+            is_reacted=is_reacted, reaction_type=ReactionType.LIKE, new_count=new_count
+        )
 
     async def toggle_save(self, question_id: uuid.UUID, current_user: User) -> SavedItemToggleResponse:
         question = await self.question_repo.get_by_id(question_id)
         if not question or not question.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found.")
 
-        existing = await self.save_repo.get_user_saved_item(
-            user_id=current_user.id,
-            target_type=TargetType.QUESTION,
-            target_id=question_id
+        is_saved, new_count = await _toggle_save(
+            self.save_repo,
+            current_user.id,
+            TargetType.QUESTION,
+            question_id,
         )
-
-        if existing:
-            await self.save_repo.delete(existing)
-            new_count = max(0, question.saves_count - 1)
-            await self.question_repo.update(question, {"saves_count": new_count})
-            return SavedItemToggleResponse(is_saved=False, new_count=new_count)
-        else:
-            sv = SavedItem(user_id=current_user.id, target_type=TargetType.QUESTION, target_id=question_id)
-            await self.save_repo.create(sv)
-            new_count = question.saves_count + 1
-            await self.question_repo.update(question, {"saves_count": new_count})
-            return SavedItemToggleResponse(is_saved=True, new_count=new_count)
+        await self.question_repo.patch(question, {"saves_count": new_count})
+        return SavedItemToggleResponse(is_saved=is_saved, new_count=new_count)
 
 
 class NestedReplyService:
@@ -584,6 +699,7 @@ class NestedReplyService:
         dto_map: Dict[uuid.UUID, QuestionReplyRead] = {}
         for r in replies:
             dto = QuestionReplyRead.model_validate(r)
+            dto.author = public_author_summary(r.author)
             dto.is_liked_by_me = r.id in liked_reply_ids
             dto.children = []
             dto_map[r.id] = dto
@@ -633,24 +749,16 @@ class NestedReplyService:
         if not reply or not reply.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reply not found.")
 
-        existing = await self.reaction_repo.get_user_reaction(
-            user_id=current_user.id,
-            target_type=TargetType.REPLY,
-            target_id=reply_id,
-            reaction_type=ReactionType.LIKE
+        is_reacted, new_count = await _toggle_like(
+            self.reaction_repo,
+            current_user.id,
+            TargetType.REPLY,
+            reply_id,
         )
-
-        if existing:
-            await self.reaction_repo.delete(existing)
-            new_count = max(0, reply.likes_count - 1)
-            await self.reply_repo.update(reply, {"likes_count": new_count})
-            return ReactionToggleResponse(is_reacted=False, reaction_type=ReactionType.LIKE, new_count=new_count)
-        else:
-            rx = Reaction(user_id=current_user.id, target_type=TargetType.REPLY, target_id=reply_id, reaction_type=ReactionType.LIKE)
-            await self.reaction_repo.create(rx)
-            new_count = reply.likes_count + 1
-            await self.reply_repo.update(reply, {"likes_count": new_count})
-            return ReactionToggleResponse(is_reacted=True, reaction_type=ReactionType.LIKE, new_count=new_count)
+        await self.reply_repo.patch(reply, {"likes_count": new_count})
+        return ReactionToggleResponse(
+            is_reacted=is_reacted, reaction_type=ReactionType.LIKE, new_count=new_count
+        )
 
     async def mark_accepted_answer(
         self,
@@ -680,7 +788,9 @@ class NestedReplyService:
         await self.question_repo.update(question, {"status": QuestionStatus.SOLVED})
 
         updated_reply = await self.reply_repo.get_by_id_with_author(reply_id)
-        return QuestionReplyRead.model_validate(updated_reply)
+        dto = QuestionReplyRead.model_validate(updated_reply)
+        dto.author = public_author_summary(updated_reply.author)
+        return dto
 
 
 # =========================================================
@@ -746,6 +856,153 @@ class FollowService:
         follow = await self.follow_repo.get_follow(follower_id, target_type, target_id)
         return follow is not None
 
+    async def _get_active_target_user(self, target_id: uuid.UUID) -> User:
+        target_user = await self.user_repo.get_by_id(target_id)
+        if not target_user or not target_user.is_active:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        return target_user
+
+    async def follow_user(self, target_id: uuid.UUID, current_user: User) -> FollowUserResponse:
+        """Idempotently follows another user (one-way, no approval state)."""
+        if target_id == current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You cannot follow yourself."
+            )
+
+        await self._get_active_target_user(target_id)
+
+        existing = await self.follow_repo.get_follow(
+            follower_id=current_user.id,
+            target_type=TargetType.USER,
+            target_id=target_id
+        )
+        if not existing:
+            await self.follow_repo.create(
+                Follow(
+                    follower_id=current_user.id,
+                    target_type=TargetType.USER,
+                    target_id=target_id
+                )
+            )
+
+        return await self._user_follow_response(target_id, is_following=True)
+
+    async def unfollow_user(self, target_id: uuid.UUID, current_user: User) -> FollowUserResponse:
+        """Stops following a user. Unfollowing a non-followed user is a no-op."""
+        existing = await self.follow_repo.get_follow(
+            follower_id=current_user.id,
+            target_type=TargetType.USER,
+            target_id=target_id
+        )
+        if existing:
+            await self.follow_repo.delete(existing)
+
+        return await self._user_follow_response(target_id, is_following=False)
+
+    async def get_follow_state(
+        self,
+        target_id: uuid.UUID,
+        current_user: Optional[User] = None
+    ) -> FollowStateRead:
+        """Relationship snapshot between the viewer and a user."""
+        await self._get_active_target_user(target_id)
+
+        is_self = bool(current_user and current_user.id == target_id)
+
+        is_following = False
+        if current_user and not is_self:
+            follow = await self.follow_repo.get_follow(
+                current_user.id, TargetType.USER, target_id
+            )
+            is_following = follow is not None
+
+        return FollowStateRead(
+            is_following=is_following,
+            is_self=is_self,
+            followers_count=await self.follow_repo.count_followers(TargetType.USER, target_id),
+            following_count=await self.follow_repo.count_following(target_id, TargetType.USER),
+        )
+
+    async def _user_follow_response(self, target_id: uuid.UUID, is_following: bool) -> FollowUserResponse:
+        return FollowUserResponse(
+            is_following=is_following,
+            followers_count=await self.follow_repo.count_followers(TargetType.USER, target_id),
+            following_count=await self.follow_repo.count_following(target_id, TargetType.USER),
+        )
+
+    async def _to_follow_user_summaries(
+        self,
+        rows: List[Tuple[User, datetime]],
+        viewer_id: Optional[uuid.UUID],
+    ) -> List[FollowUserSummary]:
+        """Decorates a page of people with viewer follow state and counts.
+
+        The page of ids arrives from one joined query; the follow state and the
+        two counts are then resolved with a fixed three extra queries, so the
+        cost does not grow with page size.
+        """
+        user_ids = [user.id for user, _ in rows]
+        if not user_ids:
+            return []
+
+        followed: set = set()
+        if viewer_id:
+            followed = await self.follow_repo.get_followed_target_ids_batch(
+                follower_id=viewer_id,
+                target_type=TargetType.USER,
+                target_ids=user_ids,
+            )
+
+        follower_counts = await self.follow_repo.count_followers_batch(
+            TargetType.USER, user_ids
+        )
+        following_counts = await self.follow_repo.count_following_users_batch(user_ids)
+
+        return [
+            FollowUserSummary(
+                id=user.id,
+                full_name=user.display_name(),
+                picture=user.picture,
+                department=user.department,
+                is_self=bool(viewer_id and user.id == viewer_id),
+                is_following=user.id in followed,
+                followers_count=follower_counts.get(user.id, 0),
+                following_count=following_counts.get(user.id, 0),
+                followed_at=followed_at,
+            )
+            for user, followed_at in rows
+        ]
+
+    async def list_following(
+        self,
+        current_user: User,
+        page: int = 1,
+        size: int = 20,
+        search: Optional[str] = None,
+    ) -> FollowUserListResponse:
+        """People the viewer follows, for the Feed rail and Following tab."""
+        rows, total = await self.follow_repo.list_followed_users(
+            follower_id=current_user.id, page=page, size=size, search=search
+        )
+        items = await self._to_follow_user_summaries(rows, current_user.id)
+        return FollowUserListResponse(items=items, total=total, page=page, size=size)
+
+    async def list_followers(
+        self,
+        target_id: uuid.UUID,
+        viewer_id: Optional[uuid.UUID],
+        page: int = 1,
+        size: int = 20,
+    ) -> FollowUserListResponse:
+        """Followers of one student, for their profile."""
+        await self._get_active_target_user(target_id)
+        rows, total = await self.follow_repo.list_followers(
+            target_id=target_id, page=page, size=size
+        )
+        items = await self._to_follow_user_summaries(rows, viewer_id)
+        return FollowUserListResponse(items=items, total=total, page=page, size=size)
+
 
 class CommunityProfileService:
     def __init__(self, session: AsyncSession):
@@ -756,11 +1013,14 @@ class CommunityProfileService:
         self.reply_repo = QuestionReplyRepository(session)
         self.follow_repo = FollowRepository(session)
         self.reaction_repo = ReactionRepository(session)
+        self.community_repo = CommunityRepository(session)
 
     async def get_community_profile(
         self,
         user_id: uuid.UUID,
-        current_user: Optional[User] = None
+        current_user: Optional[User] = None,
+        page: int = 1,
+        size: int = 10
     ) -> CommunityProfileRead:
         target_user = await self.user_repo.get_by_id(user_id)
         if not target_user or not target_user.is_active:
@@ -771,16 +1031,19 @@ class CommunityProfileService:
 
         user_summary = UserSummary(
             id=target_user.id,
-            full_name=target_user.full_name,
-            email=target_user.email
+            full_name=target_user.display_name(),
+            picture=target_user.picture,
+            department=target_user.department
         )
 
-        # Aggregate stats
+        skip = (page - 1) * size
+
+        # Aggregate stats — only PUBLIC content is exposed on a profile.
         public_pins, total_pins = await self.pin_repo.list_pins(
             author_id=user_id,
             visibility=Visibility.PUBLIC,
-            skip=0,
-            limit=10,
+            skip=skip,
+            limit=size,
             sort_by="created_at",
             sort_order="desc"
         )
@@ -788,8 +1051,8 @@ class CommunityProfileService:
         public_questions, total_questions = await self.question_repo.list_questions(
             author_id=user_id,
             visibility=Visibility.PUBLIC,
-            skip=0,
-            limit=10,
+            skip=skip,
+            limit=size,
             sort_by="created_at",
             sort_order="desc"
         )
@@ -822,24 +1085,173 @@ class CommunityProfileService:
             total_helpful_contributions=total_helpful,
             followers_count=followers_count,
             following_users_count=following_users_count,
-            following_courses_count=following_courses_count
+            following_courses_count=following_courses_count,
+            following_count=following_users_count
         )
 
-        pin_dtos = [KnowledgePinRead.model_validate(p) for p in public_pins]
-        question_dtos = [LearningQuestionRead.model_validate(q) for q in public_questions]
+        # Study context: courses followed + courses created (PRIVATE stay hidden).
+        is_self = bool(current_user and current_user.id == user_id)
+        courses = await self.community_repo.list_user_courses(
+            user_id,
+            include_private=is_self,
+        )
+        course_reads = [
+            ProfileCourseRead(
+                id=c.id,
+                title=c.title,
+                code=c.code,
+                category=c.category,
+                open_url=f"/courses/{c.code.lower()}",
+            )
+            for c in courses
+        ]
 
+        # Annotate the author's own content with the viewer's relationship.
+        viewer_id = current_user.id if current_user else None
         is_following_user = False
-        if current_user and current_user.id != user_id:
-            follow = await self.follow_repo.get_follow(current_user.id, TargetType.USER, user_id)
-            is_following_user = follow is not None
+        relationships: Dict[uuid.UUID, AuthorRelationshipRead] = {}
+        if viewer_id:
+            relationships = await _resolve_author_relationships(
+                self.follow_repo, [user_id], viewer_id
+            )
+            relationship = relationships.get(
+                user_id, AuthorRelationshipRead(is_following=False, is_self=False)
+            )
+            is_following_user = relationship.is_following
+        else:
+            relationship = AuthorRelationshipRead(is_following=False, is_self=is_self)
+
+        pin_dtos: List[KnowledgePinRead] = []
+        for p in public_pins:
+            dto = KnowledgePinRead.model_validate(p)
+            dto.author = public_author_summary(p.author)
+            if viewer_id:
+                dto.relationship = relationships.get(
+                    p.author_id,
+                    AuthorRelationshipRead(is_following=False, is_self=False),
+                )
+            pin_dtos.append(dto)
+
+        question_dtos: List[LearningQuestionRead] = []
+        for q in public_questions:
+            dto = LearningQuestionRead.model_validate(q)
+            dto.author = public_author_summary(q.author)
+            if viewer_id:
+                dto.relationship = relationships.get(
+                    q.author_id,
+                    AuthorRelationshipRead(is_following=False, is_self=False),
+                )
+            question_dtos.append(dto)
+
+        await attach_sources(self.session, public_pins, pin_dtos)
+        await attach_sources(self.session, public_questions, question_dtos)
 
         return CommunityProfileRead(
             user=user_summary,
             stats=stats,
             public_pins=pin_dtos,
             public_questions=question_dtos,
-            is_following_user=is_following_user
+            is_following_user=is_following_user,
+            relationship=relationship,
+            courses=course_reads,
+            pins_total=total_pins,
+            questions_total=total_questions,
+            page=page,
+            size=size
         )
+
+
+class UserRecommendationService:
+    """People discovery based on department and shared courses only."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.community_repo = CommunityRepository(session)
+        self.follow_repo = FollowRepository(session)
+
+    async def get_recommended_users(
+        self,
+        current_user: User,
+        page: int = 1,
+        size: int = 20
+    ) -> RecommendedUserListResponse:
+        skip = (page - 1) * size
+
+        candidates, total = await self.community_repo.list_recommended_users(
+            current_user,
+            skip=skip,
+            limit=size,
+        )
+
+        if not candidates:
+            return RecommendedUserListResponse(items=[], total=total, page=page, size=size)
+
+        candidate_ids = [candidate.id for candidate, _ in candidates]
+
+        viewer_course_ids = await self.community_repo.get_viewer_course_ids(current_user.id)
+        shared_courses = await self.community_repo.get_shared_courses_for_users(
+            viewer_course_ids, candidate_ids
+        )
+        follower_counts = await self.follow_repo.count_followers_batch(
+            TargetType.USER, candidate_ids
+        )
+        followed = await self.follow_repo.get_followed_target_ids_batch(
+            follower_id=current_user.id,
+            target_type=TargetType.USER,
+            target_ids=candidate_ids
+        )
+
+        items: List[RecommendedUserRead] = []
+        for candidate, _shared_count in candidates:
+            same_department = bool(
+                current_user.department
+                and candidate.department
+                and candidate.department == current_user.department
+            )
+            courses = shared_courses.get(candidate.id, [])
+            items.append(
+                RecommendedUserRead(
+                    id=candidate.id,
+                    full_name=candidate.full_name,
+                    picture=candidate.picture,
+                    department=candidate.department,
+                    same_department=same_department,
+                    shared_courses=[
+                        SharedCourseRead.model_validate(c) for c in courses
+                    ],
+                    recommendation_reasons=self._build_reasons(
+                        same_department, courses
+                    ),
+                    is_following=candidate.id in followed,
+                    follower_count=follower_counts.get(candidate.id, 0),
+                )
+            )
+
+        return RecommendedUserListResponse(
+            items=items,
+            total=total,
+            page=page,
+            size=size
+        )
+
+    @staticmethod
+    def _build_reasons(
+        same_department: bool,
+        shared_courses: List[Any]
+    ) -> List[str]:
+        """Human-readable explanation for the frontend."""
+        reasons: List[str] = []
+        shared_titles = [c.title for c in shared_courses]
+
+        if shared_titles:
+            count = len(shared_titles)
+            label = "course" if count == 1 else "courses"
+            reasons.append(f"{count} shared {label}")
+
+        if same_department:
+            reasons.append("Same department")
+
+        return reasons
 
 
 # =========================================================
@@ -885,6 +1297,190 @@ class FeedService:
         self.session = session
         self.activity_repo = UserActivityRepository(session)
         self.recommendation_engine = RecommendationEngine(session)
+        self.feed_repo = FeedRepository(session)
+        self.pin_repo = KnowledgePinRepository(session)
+        self.question_repo = LearningQuestionRepository(session)
+        self.reaction_repo = ReactionRepository(session)
+        self.save_repo = SavedItemRepository(session)
+        self.follow_repo = FollowRepository(session)
+
+    async def get_feed(
+        self,
+        current_user: User,
+        scope: FeedScope = FeedScope.EVERYONE,
+        content_type: FeedContentType = FeedContentType.ALL,
+        search: Optional[str] = None,
+        page: int = 1,
+        size: int = 20,
+        author_id: Optional[uuid.UUID] = None,
+    ) -> FeedPageResponse:
+        """Unified, chronological feed of questions and pins.
+
+        Ordering/limit/offset are applied to the merged set in SQL, so page N
+        never repeats or skips rows across the two content tables. An optional
+        ``author_id`` narrows the feed to a single selected person.
+        """
+        skip = (page - 1) * size
+        followed_ids = await self.feed_repo.followed_user_ids(current_user.id)
+
+        rows, total = await self.feed_repo.list_feed(
+            viewer_id=current_user.id,
+            scope=scope.value,
+            content_type=content_type.value,
+            search=search,
+            skip=skip,
+            limit=size,
+            followed_ids=followed_ids,
+            author_id=author_id,
+        )
+        if not rows:
+            return FeedPageResponse(
+                items=[],
+                total=total,
+                page=page,
+                size=size,
+                has_more=skip + 0 < total,
+                scope=scope,
+                content_type=content_type,
+            )
+
+        pin_ids = [r.id for r in rows if r.content_type == SOURCE_PIN]
+        question_ids = [r.id for r in rows if r.content_type == SOURCE_QUESTION]
+
+        # Two bounded queries regardless of page size.
+        pins, questions = await self.feed_repo.load_items(pin_ids, question_ids)
+        reply_counts = await self.feed_repo.load_reply_counts(question_ids)
+
+        pins_by_id = {p.id: p for p in pins}
+        questions_by_id = {q.id: q for q in questions}
+
+        # Decoration: relationships + viewer state in a fixed number of queries.
+        author_ids = {r.author_id for r in rows}
+        relationships = await self._batch_author_relationships(author_ids, current_user.id)
+        liked_pin_ids = await self._liked_target_ids(current_user.id, TargetType.PIN, pin_ids)
+        saved_pin_ids = await self._saved_target_ids(current_user.id, TargetType.PIN, pin_ids)
+        liked_question_ids = await self._liked_target_ids(
+            current_user.id, TargetType.QUESTION, question_ids
+        )
+        saved_question_ids = await self._saved_target_ids(
+            current_user.id, TargetType.QUESTION, question_ids
+        )
+
+        items: List[FeedItemRead] = []
+        # Sources are resolved once per content type after the loop; resolving
+        # them per item would issue one query per row.
+        pin_rows: List[KnowledgePin] = []
+        pin_dtos: List[KnowledgePinRead] = []
+        question_rows: List[LearningQuestion] = []
+        question_dtos: List[LearningQuestionRead] = []
+        for row in rows:
+            relationship = relationships.get(
+                row.author_id,
+                AuthorRelationshipRead(is_following=False, is_self=row.author_id == current_user.id),
+            )
+            if row.content_type == SOURCE_PIN:
+                pin = pins_by_id.get(row.id)
+                if pin is None:
+                    # Deleted between the union and the load; skip rather than
+                    # emit a hole in the feed.
+                    continue
+                dto = KnowledgePinRead.model_validate(pin)
+                dto.author = public_author_summary(pin.author)
+                dto.relationship = relationship
+                dto.is_liked_by_me = pin.id in liked_pin_ids
+                dto.is_saved_by_me = pin.id in saved_pin_ids
+                pin_rows.append(pin)
+                pin_dtos.append(dto)
+                items.append(
+                    FeedItemRead(
+                        content_type=FeedContentType.PINS,
+                        id=pin.id,
+                        author=dto.author,
+                        relationship=relationship,
+                        created_at=pin.created_at,
+                        pin=dto,
+                        question=None,
+                        reply_count=0,
+                    )
+                )
+            else:
+                question = questions_by_id.get(row.id)
+                if question is None:
+                    continue
+                dto = LearningQuestionRead.model_validate(question)
+                dto.author = public_author_summary(question.author)
+                dto.relationship = relationship
+                dto.is_liked_by_me = question.id in liked_question_ids
+                dto.is_saved_by_me = question.id in saved_question_ids
+                question_rows.append(question)
+                question_dtos.append(dto)
+                items.append(
+                    FeedItemRead(
+                        content_type=FeedContentType.QUESTIONS,
+                        id=question.id,
+                        author=dto.author,
+                        relationship=relationship,
+                        created_at=question.created_at,
+                        pin=None,
+                        question=dto,
+                        reply_count=reply_counts.get(question.id, 0),
+                    )
+                )
+
+        # Two bounded queries for the whole page, regardless of page size.
+        await attach_sources(self.session, pin_rows, pin_dtos)
+        await attach_sources(self.session, question_rows, question_dtos)
+
+        return FeedPageResponse(
+            items=items,
+            total=total,
+            page=page,
+            size=size,
+            has_more=skip + len(items) < total,
+            scope=scope,
+            content_type=content_type,
+        )
+
+    async def _batch_author_relationships(
+        self, author_ids: set, viewer_id: uuid.UUID
+    ) -> Dict[uuid.UUID, AuthorRelationshipRead]:
+        author_ids = {a for a in author_ids if a}
+        if not author_ids:
+            return {}
+        followed = await self.follow_repo.get_followed_target_ids_batch(
+            viewer_id, TargetType.USER, list(author_ids)
+        )
+        result: Dict[uuid.UUID, AuthorRelationshipRead] = {}
+        for author_id in author_ids:
+            result[author_id] = AuthorRelationshipRead(
+                is_following=author_id in followed,
+                is_self=author_id == viewer_id,
+            )
+        return result
+
+    async def _liked_target_ids(
+        self, user_id: uuid.UUID, target_type: TargetType, target_ids: List[uuid.UUID]
+    ) -> set:
+        if not target_ids:
+            return set()
+        reactions = await self.reaction_repo.get_user_reactions_for_targets(
+            user_id=user_id,
+            target_type=target_type,
+            target_ids=target_ids,
+        )
+        return {r.target_id for r in reactions if r.reaction_type == ReactionType.LIKE}
+
+    async def _saved_target_ids(
+        self, user_id: uuid.UUID, target_type: TargetType, target_ids: List[uuid.UUID]
+    ) -> set:
+        if not target_ids:
+            return set()
+        saves = await self.save_repo.get_user_saves_for_targets(
+            user_id=user_id,
+            target_type=target_type,
+            target_ids=target_ids,
+        )
+        return {s.target_id for s in saves}
 
     async def get_user_feed(
         self,
@@ -909,9 +1505,14 @@ class FeedService:
         activity_dtos = []
         for act in activities:
             if act.user:
-                summary = UserSummary.model_validate(act.user)
+                summary = UserSummary(
+                    id=act.user.id,
+                    full_name=act.user.display_name(),
+                    picture=act.user.picture,
+                    department=act.user.department,
+                )
             else:
-                summary = UserSummary(id=act.user_id, full_name="Unknown", email="")
+                summary = UserSummary(id=act.user_id, full_name="ExamReal Student")
                 
             activity_dtos.append(
                 UserActivityRead(
@@ -991,11 +1592,33 @@ class CommunityContextService:
         for author_id in list(author_ids)[:5]: # cap at 5
             u = await self.user_repo.get_by_id(author_id)
             if u:
-                top_contributors.append(UserSummary.model_validate(u))
+                top_contributors.append(
+                    UserSummary(
+                        id=u.id,
+                        full_name=u.display_name(),
+                        picture=u.picture,
+                        department=u.department,
+                    )
+                )
                 
+        context_pin_dtos: List[KnowledgePinRead] = []
+        for p in visible_pins:
+            pin_dto = KnowledgePinRead.model_validate(p)
+            pin_dto.author = public_author_summary(p.author)
+            context_pin_dtos.append(pin_dto)
+
+        context_question_dtos: List[LearningQuestionRead] = []
+        for q in visible_questions:
+            question_dto = LearningQuestionRead.model_validate(q)
+            question_dto.author = public_author_summary(q.author)
+            context_question_dtos.append(question_dto)
+
+        await attach_sources(self.session, visible_pins, context_pin_dtos)
+        await attach_sources(self.session, visible_questions, context_question_dtos)
+
         return CommunityContextResponse(
-            related_pins=[KnowledgePinRead.model_validate(p) for p in visible_pins],
-            related_questions=[LearningQuestionRead.model_validate(q) for q in visible_questions],
+            related_pins=context_pin_dtos,
+            related_questions=context_question_dtos,
             top_contributors=top_contributors
         )
 

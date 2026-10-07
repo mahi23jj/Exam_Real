@@ -39,8 +39,11 @@ const App: React.FC = () => {
                 <Route path="/" element={<Auth />} />
                 <Route path="/courses" element={<Courses />} />
                 <Route path="/feed" element={<Feed />} />
-                <Route path="/community" element={<Community />} />
-                <Route path="/profile" element={<Profile />} />
+<Route path="/community" element={<Community />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/profile/:userId" element={<Profile />} />
+                {/* Public profile: canonical deep link for other students. */}
+                <Route path="/community/users/:userId" element={<Profile />} />
                 <Route path="/course/:courseId" element={<CourseDetail />} />
                 <Route path="/workspace/:courseId" element={<CourseWorkspace />} />
                 <Route path="/auth" element={<Navigate to="/" replace />} />

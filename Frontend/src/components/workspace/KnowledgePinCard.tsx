@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Heart, MessageCircle, MapPin, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import type { PinType, KnowledgePin } from '../../types/workspace';
 import { togglePinLike, deletePin } from '../../services/socialService';
 import type { BackendUser } from '../../services/authService';
+import FollowUserButton from '../community/FollowUserButton';
 
 interface KnowledgePinCardProps {
   pin: KnowledgePin;
@@ -40,6 +42,7 @@ const KnowledgePinCard: React.FC<KnowledgePinCardProps> = ({
   const [liked, setLiked] = useState(pin.isLikedByMe ?? false);
   const [likeCount, setLikeCount] = useState(pin.likes);
   const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
 
   const isOwner = currentUser && pin.author.id && currentUser.id === pin.author.id;
 
@@ -115,12 +118,33 @@ const KnowledgePinCard: React.FC<KnowledgePinCardProps> = ({
 
       <div className="flex items-center justify-between mt-3 pt-2 border-t border-stone-50">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-full bg-stone-100 flex items-center justify-center text-[8px] font-bold text-stone-500">
-            {pin.author.initials}
-          </div>
-          <span className="text-xs text-stone-500 font-medium">
-            {pin.author.name} · {pin.createdAt}
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/profile/${pin.author.id}`);
+            }}
+            className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity"
+            title={`View ${pin.author.name}'s profile`}
+          >
+            <div className="w-5 h-5 rounded-full bg-stone-100 flex items-center justify-center text-[8px] font-bold text-stone-500 shrink-0">
+              {pin.author.initials}
+            </div>
+            <span className="text-xs text-stone-500 font-medium truncate">
+              {pin.author.name} · {pin.createdAt}
+            </span>
+          </button>
+          {pin.author.id && !isOwner && (
+            <FollowUserButton
+              userId={pin.author.id}
+              displayName={pin.author.name}
+              size="sm"
+              seed={{
+                isFollowing: pin.author.relationship?.isFollowing,
+                isSelf: pin.author.relationship?.isSelf,
+              }}
+            />
+          )}
         </div>
         <div className="flex items-center gap-2 text-stone-400">
           {showLocateAction && (

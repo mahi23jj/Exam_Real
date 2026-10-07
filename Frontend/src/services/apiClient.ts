@@ -103,7 +103,7 @@ export async function apiPostForm<T>(path: string, formData: FormData): Promise<
   return parseResponse<T>(response);
 }
 
-export async function apiDelete(path: string): Promise<void> {
+export async function apiDelete<T = void>(path: string): Promise<T> {
   const response = await fetch(buildUrl(path), { method: 'DELETE', headers: authHeaders() });
-  await parseResponse<void>(response);
+  return parseResponse<T>(response);
 }
